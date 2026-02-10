@@ -6,6 +6,7 @@
 @inject ChatService ChatService
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
+@inject ILogger<ChatRoom> Logger
 
 <div class="chat-container">
     <!-- 头部 -->
@@ -230,16 +231,15 @@
         {
             var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
             var hubUrl = $"{baseUrl}/chathub";
-            Console.WriteLine($"正在连接到SignalR Hub: {hubUrl}");
+            Logger.LogInformation("正在连接到SignalR Hub: {HubUrl}", hubUrl);
 
             await ChatService.InitializeAsync(hubUrl);
-            Console.WriteLine($"SignalR连接状态: {ChatService.State}");
+            Logger.LogInformation("SignalR连接状态: {State}", ChatService.State);
             _showReconnectButton = !ChatService.IsConnected;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"SignalR连接失败: {ex.Message}");
-            Console.WriteLine($"完整错误: {ex}");
+            Logger.LogError(ex, "SignalR连接失败");
             _showReconnectButton = true;
         }
     }
@@ -252,10 +252,11 @@
             var hubUrl = $"{baseUrl}/chathub";
             await ChatService.ReconnectAsync(hubUrl);
             _showReconnectButton = !ChatService.IsConnected;
+            Logger.LogInformation("重新连接成功");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"重新连接失败: {ex.Message}");
+            Logger.LogError(ex, "重新连接失败");
         }
     }
 
@@ -315,7 +316,11 @@
         _showReconnectButton = true;
         if (error != null)
         {
-            Console.WriteLine($"连接关闭: {error.Message}");
+            Logger.LogWarning(error, "连接关闭");
+        }
+        else
+        {
+            Logger.LogInformation("连接已关闭");
         }
         InvokeAsync(StateHasChanged);
     }
@@ -323,7 +328,7 @@
     private void OnReconnected(string connectionId)
     {
         _showReconnectButton = false;
-        Console.WriteLine($"已重连: {connectionId}");
+        Logger.LogInformation("已重连: {ConnectionId}", connectionId);
         InvokeAsync(StateHasChanged);
     }
 
@@ -376,7 +381,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"滚动失败: {ex.Message}");
+            Logger.LogWarning(ex, "滚动失败");
         }
     }
 

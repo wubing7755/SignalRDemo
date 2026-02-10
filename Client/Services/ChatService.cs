@@ -35,6 +35,15 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     private string _currentUser = string.Empty;
     private ConnectionState _state = ConnectionState.Disconnected;
     private readonly DebounceService _debounceService = new();
+    private readonly ILogger<ChatService> _logger;
+
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    public ChatService(ILogger<ChatService> logger)
+    {
+        _logger = logger;
+    }
 
     // 事件
     public event Action<ChatMessage>? MessageReceived;
@@ -185,7 +194,7 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
         {
             if (_hubConnection?.State != HubConnectionState.Connected)
             {
-                Console.WriteLine("SignalR connection is not established. Message not sent.");
+                _logger.LogWarning("SignalR connection is not established. Message not sent.");
                 return;
             }
 
@@ -202,7 +211,7 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to send message: {ex.Message}");
+                _logger.LogError(ex, "Failed to send message");
                 throw;
             }
         }, delayMilliseconds: 100); // 100ms 防抖
@@ -226,7 +235,7 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to set user name: {ex.Message}");
+            _logger.LogError(ex, "Failed to set user name: {UserName}", userName);
         }
     }
 
@@ -243,7 +252,7 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to get recent messages: {ex.Message}");
+            _logger.LogError(ex, "Failed to get recent messages");
         }
     }
 
