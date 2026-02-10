@@ -6,41 +6,109 @@
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 
-<h3>实时聊天室</h3>
-
 <div class="chat-container">
-    <div class="row">
-        <div class="col-md-8">
-            <div class="chat-messages" style="height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
-                @foreach (var message in _messages)
+    <!-- 头部 -->
+    <div class="chat-header">
+        <div class="chat-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+            实时聊天室
+        </div>
+        <div class="connection-info">
+            <span class="status-badge @(ChatService.IsConnected ? "connected" : "disconnected")">
+                <span class="status-dot"></span>
+                @(ChatService.IsConnected ? "已连接" : "未连接")
+            </span>
+            <span class="current-user">
+                当前用户: <strong>@ChatService.GetCurrentUser()</strong>
+            </span>
+        </div>
+    </div>
+
+    <!-- 聊天主体 -->
+    <div class="chat-body">
+        <!-- 消息区域 -->
+        <div class="chat-messages-wrapper">
+            <div class="chat-messages" @ref="_messagesContainer">
+                @if (_messages.Count == 0)
                 {
-                    <div class="message @(message.User == ChatService.GetCurrentUser() ? "own-message" : "other-message")">
-                        <strong>@message.User</strong> <small>@message.Timestamp.ToLocalTime().ToString("HH:mm")</small>
-                        <div>@message.Message</div>
+                    <div class="empty-state">
+                        <div class="empty-icon">💬</div>
+                        <div class="empty-title">还没有消息</div>
+                        <div class="empty-subtitle">发送第一条消息开始聊天吧！</div>
                     </div>
                 }
+                else
+                {
+                    @foreach (var message in _messages)
+                    {
+                        var isOwnMessage = message.User == ChatService.GetCurrentUser();
+                        <div class="message @(isOwnMessage ? "own-message" : "other-message")">
+                            <div class="message-avatar" style="background: @GetUserColor(message.User)">
+                                @GetUserInitial(message.User)
+                            </div>
+                            <div class="message-content">
+                                <div class="message-header">
+                                    <span class="message-user">@message.User</span>
+                                    <span class="message-time">@FormatTime(message.Timestamp)</span>
+                                </div>
+                                <div class="message-bubble">
+                                    @message.Message
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                <div @ref="_messagesEnd"></div>
             </div>
-            <div class="message-input">
-                <div class="input-group">
-                    <input @bind="_newMessage" @bind:event="oninput" @onkeypress="HandleKeyPress"
-                           placeholder="输入消息..." class="form-control" />
-                    <button @onclick="SendMessage" class="btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(_newMessage) || !ChatService.IsConnected)">发送</button>
+
+            <!-- 输入区域 -->
+            <div class="message-input-area">
+                <div class="input-wrapper">
+                    <input @bind="_newMessage" 
+                           @bind:event="oninput" 
+                           @onkeypress="HandleKeyPress"
+                           placeholder="输入消息..." 
+                           class="message-input"
+                           disabled="@(!ChatService.IsConnected)" />
+                    <button @onclick="SendMessage" 
+                            class="send-button" 
+                            disabled="@(string.IsNullOrWhiteSpace(_newMessage) || !ChatService.IsConnected)"
+                            title="发送消息">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
                 </div>
             </div>
-            <div class="connection-status mt-2">
-                状态: <span class="badge @(ChatService.IsConnected ? "bg-success" : "bg-danger")">@(ChatService.IsConnected ? "已连接" : "未连接")</span>
-                当前用户: <strong>@ChatService.GetCurrentUser()</strong>
-            </div>
         </div>
-        <div class="col-md-4">
-            <div class="user-list" style="border: 1px solid #ccc; padding: 10px;">
-                <h5>在线用户</h5>
-                <ul>
-                    @foreach (var user in _connectedUsers)
-                    {
-                        <li>@user</li>
-                    }
-                </ul>
+
+        <!-- 用户列表面板 -->
+        <div class="user-panel">
+            <div class="user-panel-header">
+                <div class="user-panel-title">
+                    在线用户
+                    <span class="user-count">@_connectedUsers.Count</span>
+                </div>
+            </div>
+            <div class="user-list">
+                @foreach (var user in _connectedUsers)
+                {
+                    <div class="user-item">
+                        <div class="user-item-avatar" style="background: @GetUserColor(user)">
+                            @GetUserInitial(user)
+                        </div>
+                        <div class="user-item-info">
+                            <div class="user-item-name">@user</div>
+                            <div class="user-item-status">
+                                <span class="online-dot"></span>
+                                在线
+                            </div>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -50,6 +118,18 @@
     private List<ChatMessage> _messages = new();
     private List<string> _connectedUsers = new();
     private string _newMessage = string.Empty;
+    private ElementReference _messagesContainer;
+    private ElementReference _messagesEnd;
+    private bool _shouldScrollToBottom;
+
+    // 预定义的用户颜色
+    private static readonly string[] UserColors = new[]
+    {
+        "#667eea", "#764ba2", "#f093fb", "#f5576c",
+        "#4facfe", "#00f2fe", "#43e97b", "#38f9d7",
+        "#fa709a", "#fee140", "#30cfd0", "#330867",
+        "#a8edea", "#fed6e3", "#ff9a9e", "#fecfef"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -57,11 +137,19 @@
         await base.OnInitializedAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldScrollToBottom)
+        {
+            _shouldScrollToBottom = false;
+            await ScrollToBottomAsync();
+        }
+    }
+
     private async Task InitializeChatService()
     {
         try
         {
-            // 使用当前站点的基础 URL 来构建 SignalR Hub URL
             var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
             var hubUrl = $"{baseUrl}/chathub";
             Console.WriteLine($"正在连接到SignalR Hub: {hubUrl}");
@@ -73,20 +161,19 @@
             ChatService.UserConnected += OnUserConnected;
             ChatService.UserDisconnected += OnUserDisconnected;
             
-            // Force UI refresh to show correct connection status
             StateHasChanged();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"SignalR连接失败: {ex.Message}");
             Console.WriteLine($"完整错误: {ex}");
-            // 可以在这里添加用户友好的错误提示
         }
     }
 
     private void OnMessageReceived(ChatMessage message)
     {
         _messages.Add(message);
+        _shouldScrollToBottom = true;
         InvokeAsync(StateHasChanged);
     }
 
@@ -111,6 +198,7 @@
         {
             await ChatService.SendMessageAsync(_newMessage);
             _newMessage = string.Empty;
+            _shouldScrollToBottom = true;
         }
     }
 
@@ -119,6 +207,70 @@
         if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newMessage))
         {
             await SendMessage();
+        }
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await _messagesEnd.FocusAsync();
+            });
+        }
+        catch
+        {
+            // 如果 FocusAsync 失败，忽略错误
+        }
+    }
+
+    /// <summary>
+    /// 获取用户首字母
+    /// </summary>
+    private string GetUserInitial(string userName)
+    {
+        if (string.IsNullOrEmpty(userName))
+            return "?";
+        
+        // 取第一个字母或字符
+        var firstChar = userName.Trim().FirstOrDefault();
+        return char.ToUpper(firstChar).ToString();
+    }
+
+    /// <summary>
+    /// 获取用户对应的颜色（基于用户名哈希）
+    /// </summary>
+    private string GetUserColor(string userName)
+    {
+        if (string.IsNullOrEmpty(userName))
+            return UserColors[0];
+        
+        // 使用用户名哈希来选择颜色，确保同一用户始终显示相同颜色
+        var hash = userName.GetHashCode();
+        var index = Math.Abs(hash) % UserColors.Length;
+        return UserColors[index];
+    }
+
+    /// <summary>
+    /// 格式化时间显示
+    /// </summary>
+    private string FormatTime(DateTime timestamp)
+    {
+        var localTime = timestamp.ToLocalTime();
+        var now = DateTime.Now;
+        
+        if (localTime.Date == now.Date)
+        {
+            return localTime.ToString("HH:mm");
+        }
+        else if (localTime.Date == now.AddDays(-1).Date)
+        {
+            return $"昨天 {localTime:HH:mm}";
+        }
+        else
+        {
+            return localTime.ToString("MM-dd HH:mm");
         }
     }
 
