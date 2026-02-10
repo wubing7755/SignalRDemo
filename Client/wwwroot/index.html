@@ -20,6 +20,15 @@
         <a class="dismiss">🗙</a>
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        // 滚动到元素底部
+        function scrollToBottom(elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.scrollTop = element.scrollHeight;
+            }
+        }
+    </script>
 </body>
 
 </html>

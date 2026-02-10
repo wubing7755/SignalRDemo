@@ -1,99 +1,325 @@
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.AspNetCore.SignalR.Protocol;
 using SignalRDemo.Shared.Models;
+using System.ComponentModel;
 
 namespace SignalRDemo.Client.Services;
 
-public class ChatService : IAsyncDisposable
+/// <summary>
+/// 连接状态枚举
+/// </summary>
+public enum ConnectionState
+{
+    [Description("未连接")]
+    Disconnected,
+    
+    [Description("连接中...")]
+    Connecting,
+    
+    [Description("已连接")]
+    Connected,
+    
+    [Description("重连中...")]
+    Reconnecting,
+    
+    [Description("连接失败")]
+    Failed
+}
+
+/// <summary>
+/// SignalR 聊天服务 - 管理连接和消息收发
+/// </summary>
+public class ChatService : IAsyncDisposable, INotifyPropertyChanged
 {
     private HubConnection? _hubConnection;
-    private string _currentUser = $"User_{Guid.NewGuid().ToString()[..4]}";
+    private string _currentUser = string.Empty;
+    private ConnectionState _state = ConnectionState.Disconnected;
+    private readonly DebounceService _debounceService = new();
 
+    // 事件
     public event Action<ChatMessage>? MessageReceived;
-    public event Action<string>? UserConnected;
-    public event Action<string>? UserDisconnected;
+    public event Action<string>? UserJoined;
+    public event Action<string>? UserLeft;
+    public event Action<IReadOnlyList<string>>? UserListUpdated;
+    public event Action<IReadOnlyList<ChatMessage>>? MessageHistoryReceived;
+    public event Action<string>? DefaultUserNameReceived;
+    public event PropertyChangedEventHandler? PropertyChanged;
+    public event Action<Exception?>? ConnectionClosed;
+    public event Action<string>? Reconnected;
 
-    public bool IsConnected => _hubConnection?.State == HubConnectionState.Connected;
-    public HubConnectionState ConnectionState => _hubConnection?.State ?? HubConnectionState.Disconnected;
+    /// <summary>
+    /// 当前连接状态
+    /// </summary>
+    public ConnectionState State
+    {
+        get => _state;
+        private set
+        {
+            if (_state != value)
+            {
+                _state = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(State)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StateText)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnecting)));
+            }
+        }
+    }
 
+    /// <summary>
+    /// 连接状态文本
+    /// </summary>
+    public string StateText => GetEnumDescription(State);
+
+    /// <summary>
+    /// 是否已连接
+    /// </summary>
+    public bool IsConnected => State == ConnectionState.Connected;
+
+    /// <summary>
+    /// 是否正在连接
+    /// </summary>
+    public bool IsConnecting => State == ConnectionState.Connecting || State == ConnectionState.Reconnecting;
+
+    /// <summary>
+    /// 当前用户名
+    /// </summary>
+    public string CurrentUser
+    {
+        get => _currentUser;
+        private set
+        {
+            if (_currentUser != value)
+            {
+                _currentUser = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentUser)));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 初始化连接（幂等操作）
+    /// </summary>
     public async Task InitializeAsync(string hubUrl)
     {
+        // 如果已经连接或正在连接，直接返回
+        if (_hubConnection != null && 
+            (_hubConnection.State != HubConnectionState.Disconnected))
+        {
+            return;
+        }
+
+        State = ConnectionState.Connecting;
+
         try
         {
-            // Use absolute minimal configuration - no options at all
-            // This avoids any HttpConnectionOptions configuration that might trigger X509 operations
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(hubUrl)
+                .WithAutomaticReconnect(new[] { 
+                    TimeSpan.Zero,       // 立即重试
+                    TimeSpan.FromSeconds(2),
+                    TimeSpan.FromSeconds(10),
+                    TimeSpan.FromSeconds(30)
+                })
+                .AddMessagePackProtocol() // 使用 MessagePack 协议提升性能
                 .Build();
 
-            // Setup message handlers
-            _hubConnection.On<ChatMessage>("ReceiveMessage", (message) =>
-            {
-                MessageReceived?.Invoke(message);
-            });
+            // 设置消息处理
+            SetupEventHandlers();
 
-            _hubConnection.On<string>("UserConnected", (connectionId) =>
+            // 设置连接状态变更事件
+            _hubConnection.Reconnecting += error =>
             {
-                UserConnected?.Invoke(connectionId);
-            });
+                State = ConnectionState.Reconnecting;
+                return Task.CompletedTask;
+            };
 
-            _hubConnection.On<string>("UserDisconnected", (connectionId) =>
+            _hubConnection.Reconnected += connectionId =>
             {
-                UserDisconnected?.Invoke(connectionId);
-            });
+                State = ConnectionState.Connected;
+                Reconnected?.Invoke(connectionId ?? string.Empty);
+                return Task.CompletedTask;
+            };
 
-            // Start the connection
+            _hubConnection.Closed += error =>
+            {
+                State = ConnectionState.Disconnected;
+                ConnectionClosed?.Invoke(error);
+                return Task.CompletedTask;
+            };
+
+            // 启动连接
             await _hubConnection.StartAsync();
+            State = ConnectionState.Connected;
+
+            // 请求历史消息
+            await GetRecentMessagesAsync();
         }
         catch (Exception ex)
         {
+            State = ConnectionState.Failed;
             throw new InvalidOperationException($"Failed to initialize SignalR connection: {ex.Message}", ex);
         }
     }
 
+    /// <summary>
+    /// 重新连接
+    /// </summary>
+    public async Task ReconnectAsync(string hubUrl)
+    {
+        await DisposeAsync();
+        await InitializeAsync(hubUrl);
+    }
+
+    /// <summary>
+    /// 发送消息（带防抖）
+    /// </summary>
     public async Task SendMessageAsync(string messageText)
     {
-        if (string.IsNullOrWhiteSpace(messageText))
+        if (string.IsNullOrWhiteSpace(messageText) || !IsConnected)
         {
             return;
         }
 
-        if (_hubConnection?.State != HubConnectionState.Connected)
+        await _debounceService.DebounceAsync(async () =>
         {
-            Console.WriteLine("SignalR connection is not established. Message not sent.");
+            if (_hubConnection?.State != HubConnectionState.Connected)
+            {
+                Console.WriteLine("SignalR connection is not established. Message not sent.");
+                return;
+            }
+
+            try
+            {
+                var chatMessage = new ChatMessage
+                {
+                    User = CurrentUser,
+                    Message = messageText.Trim(),
+                    Timestamp = DateTime.UtcNow
+                };
+
+                await _hubConnection.SendAsync("SendMessage", chatMessage);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to send message: {ex.Message}");
+                throw;
+            }
+        }, delayMilliseconds: 100); // 100ms 防抖
+    }
+
+    /// <summary>
+    /// 设置用户名
+    /// </summary>
+    public async Task SetUserNameAsync(string userName)
+    {
+        if (string.IsNullOrWhiteSpace(userName) || !IsConnected)
+        {
             return;
         }
 
+        CurrentUser = userName.Trim();
+        
         try
         {
-            var chatMessage = new ChatMessage
-            {
-                User = _currentUser,
-                Message = messageText,
-                Timestamp = DateTime.UtcNow
-            };
-
-            await _hubConnection.SendAsync("SendMessage", chatMessage);
+            await _hubConnection!.SendAsync("SetUserName", CurrentUser);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to send message: {ex.Message}");
+            Console.WriteLine($"Failed to set user name: {ex.Message}");
         }
     }
 
-    public string GetCurrentUser() => _currentUser;
-
-    public void SetCurrentUser(string userName)
+    /// <summary>
+    /// 获取最近的消息历史
+    /// </summary>
+    public async Task GetRecentMessagesAsync(int count = 50)
     {
-        if (!string.IsNullOrWhiteSpace(userName))
+        if (!IsConnected) return;
+
+        try
         {
-            _currentUser = userName;
+            await _hubConnection!.SendAsync("GetRecentMessages", count);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to get recent messages: {ex.Message}");
         }
     }
 
+    /// <summary>
+    /// 设置事件处理器
+    /// </summary>
+    private void SetupEventHandlers()
+    {
+        if (_hubConnection == null) return;
+
+        // 接收消息
+        _hubConnection.On<ChatMessage>("ReceiveMessage", message =>
+        {
+            MessageReceived?.Invoke(message);
+        });
+
+        // 接收消息历史
+        _hubConnection.On<IReadOnlyList<ChatMessage>>("ReceiveMessageHistory", messages =>
+        {
+            MessageHistoryReceived?.Invoke(messages);
+        });
+
+        // 用户加入
+        _hubConnection.On<string>("UserJoined", userName =>
+        {
+            UserJoined?.Invoke(userName);
+        });
+
+        // 用户离开
+        _hubConnection.On<string>("UserLeft", userName =>
+        {
+            UserLeft?.Invoke(userName);
+        });
+
+        // 用户列表更新
+        _hubConnection.On<IReadOnlyList<string>>("UpdateUserList", userNames =>
+        {
+            UserListUpdated?.Invoke(userNames);
+        });
+
+        // 默认用户名
+        _hubConnection.On<string>("SetDefaultUserName", userName =>
+        {
+            CurrentUser = userName;
+            DefaultUserNameReceived?.Invoke(userName);
+        });
+    }
+
+    /// <summary>
+    /// 获取枚举描述
+    /// </summary>
+    private static string GetEnumDescription(Enum value)
+    {
+        var field = value.GetType().GetField(value.ToString());
+        var attribute = field?.GetCustomAttributes(typeof(DescriptionAttribute), false)
+            .FirstOrDefault() as DescriptionAttribute;
+        return attribute?.Description ?? value.ToString();
+    }
+
+    /// <summary>
+    /// 释放资源
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
+        _debounceService.Dispose();
+        
         if (_hubConnection != null)
         {
+            // 移除所有事件处理
+            _hubConnection.Remove("ReceiveMessage");
+            _hubConnection.Remove("ReceiveMessageHistory");
+            _hubConnection.Remove("UserJoined");
+            _hubConnection.Remove("UserLeft");
+            _hubConnection.Remove("UpdateUserList");
+            _hubConnection.Remove("SetDefaultUserName");
+
             try
             {
                 await _hubConnection.DisposeAsync();
@@ -101,6 +327,7 @@ public class ChatService : IAsyncDisposable
             finally
             {
                 _hubConnection = null;
+                State = ConnectionState.Disconnected;
             }
         }
     }

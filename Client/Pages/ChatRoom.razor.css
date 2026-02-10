@@ -456,8 +456,25 @@
 
 /* 系统消息 */
 .system-message {
-    text-align: center;
-    margin: 12px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    margin: 8px 0;
+}
+
+.system-text {
+    background: #e9ecef;
+    color: #6c757d;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.system-time {
+    color: #adb5bd;
+    font-size: 11px;
 }
 
 .system-message-text {
@@ -467,4 +484,150 @@
     border-radius: 12px;
     font-size: 0.75rem;
     color: #718096;
+}
+
+/* 加载遮罩 */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e0e0e0;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+    margin-top: 16px;
+    color: #666;
+    font-size: 14px;
+}
+
+/* 连接状态样式 */
+.status-badge.connecting {
+    background: rgba(255, 193, 7, 0.1);
+    color: #f59e0b;
+}
+
+.status-badge.reconnecting {
+    background: rgba(251, 140, 0, 0.1);
+    color: #f97316;
+}
+
+.status-badge.failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+/* 重连按钮 */
+.reconnect-button {
+    padding: 6px 12px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: 8px;
+}
+
+.reconnect-button:hover:not(:disabled) {
+    background: #5a6fd6;
+}
+
+.reconnect-button:disabled {
+    background: #adb5bd;
+    cursor: not-allowed;
+}
+
+/* 用户名输入 */
+.username-input-wrapper {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.username-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.username-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.username-button {
+    padding: 10px 20px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.username-button:hover:not(:disabled) {
+    background: #5a6fd6;
+}
+
+.username-button:disabled {
+    background: #adb5bd;
+    cursor: not-allowed;
+}
+
+.change-username-button {
+    padding: 6px 12px;
+    background: transparent;
+    color: #667eea;
+    border: 1px solid #667eea;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 8px;
+}
+
+.change-username-button:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+/* 字符计数器 */
+.message-counter {
+    font-size: 12px;
+    color: #adb5bd;
+    margin-right: 8px;
+}
+
+/* 当前用户标识 */
+.user-item-name.current {
+    color: #667eea;
+    font-weight: 600;
 }

@@ -2,9 +2,10 @@
 @using SignalRDemo.Client.Services
 @using SignalRDemo.Shared.Models
 @using Microsoft.AspNetCore.Components
+@implements IAsyncDisposable
 @inject ChatService ChatService
 @inject NavigationManager NavigationManager
-@implements IAsyncDisposable
+@inject IJSRuntime JSRuntime
 
 <div class="chat-container">
     <!-- 头部 -->
@@ -16,13 +17,24 @@
             实时聊天室
         </div>
         <div class="connection-info">
-            <span class="status-badge @(ChatService.IsConnected ? "connected" : "disconnected")">
+            <!-- 连接状态徽章 -->
+            <span class="status-badge @GetConnectionStatusClass()">
                 <span class="status-dot"></span>
-                @(ChatService.IsConnected ? "已连接" : "未连接")
+                @ChatService.StateText
             </span>
+            
+            <!-- 当前用户 -->
             <span class="current-user">
-                当前用户: <strong>@ChatService.GetCurrentUser()</strong>
+                当前用户: <strong>@ChatService.CurrentUser</strong>
             </span>
+            
+            <!-- 重连按钮 -->
+            @if (_showReconnectButton)
+            {
+                <button class="reconnect-button" @onclick="ReconnectAsync" disabled="@ChatService.IsConnecting">
+                    @(ChatService.IsConnecting ? "连接中..." : "重新连接")
+                </button>
+            }
         </div>
     </div>
 
@@ -30,8 +42,17 @@
     <div class="chat-body">
         <!-- 消息区域 -->
         <div class="chat-messages-wrapper">
-            <div class="chat-messages" @ref="_messagesContainer">
-                @if (_messages.Count == 0)
+            <!-- 加载中遮罩 -->
+            @if (ChatService.IsConnecting)
+            {
+                <div class="loading-overlay">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">@ChatService.StateText</div>
+                </div>
+            }
+
+            <div class="chat-messages" @ref="_messagesContainer" id="messagesContainer">
+                @if (_messages.Count == 0 && !ChatService.IsConnecting)
                 {
                     <div class="empty-state">
                         <div class="empty-icon">💬</div>
@@ -43,35 +64,72 @@
                 {
                     @foreach (var message in _messages)
                     {
-                        var isOwnMessage = message.User == ChatService.GetCurrentUser();
-                        <div class="message @(isOwnMessage ? "own-message" : "other-message")">
-                            <div class="message-avatar" style="background: @GetUserColor(message.User)">
-                                @GetUserInitial(message.User)
+                        var isOwnMessage = message.User == ChatService.CurrentUser;
+                        var isSystemMessage = message.User == "System";
+                        
+                        @if (isSystemMessage)
+                        {
+                            <div class="system-message">
+                                <span class="system-text">@message.Message</span>
+                                <span class="system-time">@FormatTime(message.Timestamp)</span>
                             </div>
-                            <div class="message-content">
-                                <div class="message-header">
-                                    <span class="message-user">@message.User</span>
-                                    <span class="message-time">@FormatTime(message.Timestamp)</span>
+                        }
+                        else
+                        {
+                            <div class="message @(isOwnMessage ? "own-message" : "other-message")" @key="message.Timestamp + message.User">
+                                <div class="message-avatar" style="background: @GetUserColor(message.User)">
+                                    @GetUserInitial(message.User)
                                 </div>
-                                <div class="message-bubble">
-                                    @message.Message
+                                <div class="message-content">
+                                    <div class="message-header">
+                                        <span class="message-user">@message.User</span>
+                                        <span class="message-time">@FormatTime(message.Timestamp)</span>
+                                    </div>
+                                    <div class="message-bubble">
+                                        @message.Message
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        }
                     }
                 }
-                <div @ref="_messagesEnd"></div>
             </div>
 
             <!-- 输入区域 -->
             <div class="message-input-area">
+                <!-- 用户名设置 -->
+                @if (_showUserNameInput)
+                {
+                    <div class="username-input-wrapper">
+                        <input @bind="_newUserName" 
+                               @bind:event="oninput"
+                               @onkeypress="HandleUserNameKeyPress"
+                               placeholder="输入您的昵称..." 
+                               class="username-input"
+                               maxlength="20" />
+                        <button @onclick="SetUserNameAsync" 
+                                class="username-button"
+                                disabled="@string.IsNullOrWhiteSpace(_newUserName)">
+                            设置昵称
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <button class="change-username-button" @onclick="ShowUserNameInput">
+                        修改昵称
+                    </button>
+                }
+
                 <div class="input-wrapper">
                     <input @bind="_newMessage" 
                            @bind:event="oninput" 
                            @onkeypress="HandleKeyPress"
                            placeholder="输入消息..." 
                            class="message-input"
-                           disabled="@(!ChatService.IsConnected)" />
+                           disabled="@(!ChatService.IsConnected)"
+                           maxlength="500" />
+                    <span class="message-counter">@(_newMessage?.Length ?? 0)/500</span>
                     <button @onclick="SendMessage" 
                             class="send-button" 
                             disabled="@(string.IsNullOrWhiteSpace(_newMessage) || !ChatService.IsConnected)"
@@ -96,12 +154,14 @@
             <div class="user-list">
                 @foreach (var user in _connectedUsers)
                 {
-                    <div class="user-item">
+                    <div class="user-item" @key="user">
                         <div class="user-item-avatar" style="background: @GetUserColor(user)">
                             @GetUserInitial(user)
                         </div>
                         <div class="user-item-info">
-                            <div class="user-item-name">@user</div>
+                            <div class="user-item-name @(user == ChatService.CurrentUser ? "current" : "")">
+                                @user @(user == ChatService.CurrentUser ? "(我)" : "")
+                            </div>
                             <div class="user-item-status">
                                 <span class="online-dot"></span>
                                 在线
@@ -118,9 +178,11 @@
     private List<ChatMessage> _messages = new();
     private List<string> _connectedUsers = new();
     private string _newMessage = string.Empty;
+    private string _newUserName = string.Empty;
     private ElementReference _messagesContainer;
-    private ElementReference _messagesEnd;
     private bool _shouldScrollToBottom;
+    private bool _showUserNameInput = true;
+    private bool _showReconnectButton = false;
 
     // 预定义的用户颜色
     private static readonly string[] UserColors = new[]
@@ -133,6 +195,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // 订阅服务事件
+        ChatService.PropertyChanged += OnPropertyChanged;
+        ChatService.MessageReceived += OnMessageReceived;
+        ChatService.MessageHistoryReceived += OnMessageHistoryReceived;
+        ChatService.UserJoined += OnUserJoined;
+        ChatService.UserLeft += OnUserLeft;
+        ChatService.UserListUpdated += OnUserListUpdated;
+        ChatService.DefaultUserNameReceived += OnDefaultUserNameReceived;
+        ChatService.ConnectionClosed += OnConnectionClosed;
+        ChatService.Reconnected += OnReconnected;
+
         await InitializeChatService();
         await base.OnInitializedAsync();
     }
@@ -146,6 +219,11 @@
         }
     }
 
+    private void OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
     private async Task InitializeChatService()
     {
         try
@@ -155,18 +233,29 @@
             Console.WriteLine($"正在连接到SignalR Hub: {hubUrl}");
 
             await ChatService.InitializeAsync(hubUrl);
-            Console.WriteLine($"SignalR连接状态: {ChatService.IsConnected}");
-
-            ChatService.MessageReceived += OnMessageReceived;
-            ChatService.UserConnected += OnUserConnected;
-            ChatService.UserDisconnected += OnUserDisconnected;
-            
-            StateHasChanged();
+            Console.WriteLine($"SignalR连接状态: {ChatService.State}");
+            _showReconnectButton = !ChatService.IsConnected;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"SignalR连接失败: {ex.Message}");
             Console.WriteLine($"完整错误: {ex}");
+            _showReconnectButton = true;
+        }
+    }
+
+    private async Task ReconnectAsync()
+    {
+        try
+        {
+            var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+            var hubUrl = $"{baseUrl}/chathub";
+            await ChatService.ReconnectAsync(hubUrl);
+            _showReconnectButton = !ChatService.IsConnected;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"重新连接失败: {ex.Message}");
         }
     }
 
@@ -177,18 +266,64 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private void OnUserConnected(string connectionId)
+    private void OnMessageHistoryReceived(IReadOnlyList<ChatMessage> messages)
     {
-        if (!_connectedUsers.Contains(connectionId))
-        {
-            _connectedUsers.Add(connectionId);
-            InvokeAsync(StateHasChanged);
-        }
+        _messages.Clear();
+        _messages.AddRange(messages);
+        _shouldScrollToBottom = true;
+        InvokeAsync(StateHasChanged);
     }
 
-    private void OnUserDisconnected(string connectionId)
+    private void OnUserJoined(string userName)
     {
-        _connectedUsers.Remove(connectionId);
+        _messages.Add(new ChatMessage
+        {
+            User = "System",
+            Message = $"{userName} 加入了聊天室",
+            Timestamp = DateTime.UtcNow
+        });
+        _shouldScrollToBottom = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnUserLeft(string userName)
+    {
+        _messages.Add(new ChatMessage
+        {
+            User = "System",
+            Message = $"{userName} 离开了聊天室",
+            Timestamp = DateTime.UtcNow
+        });
+        _shouldScrollToBottom = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnUserListUpdated(IReadOnlyList<string> userNames)
+    {
+        _connectedUsers = userNames.ToList();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnDefaultUserNameReceived(string userName)
+    {
+        _newUserName = userName;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnConnectionClosed(Exception? error)
+    {
+        _showReconnectButton = true;
+        if (error != null)
+        {
+            Console.WriteLine($"连接关闭: {error.Message}");
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnReconnected(string connectionId)
+    {
+        _showReconnectButton = false;
+        Console.WriteLine($"已重连: {connectionId}");
         InvokeAsync(StateHasChanged);
     }
 
@@ -210,18 +345,54 @@
         }
     }
 
+    private void ShowUserNameInput()
+    {
+        _newUserName = ChatService.CurrentUser;
+        _showUserNameInput = true;
+    }
+
+    private async Task SetUserNameAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_newUserName))
+        {
+            await ChatService.SetUserNameAsync(_newUserName);
+            _showUserNameInput = false;
+        }
+    }
+
+    private async Task HandleUserNameKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newUserName))
+        {
+            await SetUserNameAsync();
+        }
+    }
+
     private async Task ScrollToBottomAsync()
     {
         try
         {
-            await InvokeAsync(async () =>
-            {
-                await _messagesEnd.FocusAsync();
-            });
+            await JSRuntime.InvokeVoidAsync("scrollToBottom", "messagesContainer");
         }
-        catch
+        catch (Exception ex)
         {
-            // 如果 FocusAsync 失败，忽略错误
+            Console.WriteLine($"滚动失败: {ex.Message}");
+        }
+    }
+
+    private string GetConnectionStatusClass()
+    {
+        switch (ChatService.State)
+        {
+            case ConnectionState.Connected:
+                return "connected";
+            case ConnectionState.Connecting:
+            case ConnectionState.Reconnecting:
+                return "connecting";
+            case ConnectionState.Failed:
+                return "failed";
+            default:
+                return "disconnected";
         }
     }
 
@@ -233,7 +404,6 @@
         if (string.IsNullOrEmpty(userName))
             return "?";
         
-        // 取第一个字母或字符
         var firstChar = userName.Trim().FirstOrDefault();
         return char.ToUpper(firstChar).ToString();
     }
@@ -246,7 +416,6 @@
         if (string.IsNullOrEmpty(userName))
             return UserColors[0];
         
-        // 使用用户名哈希来选择颜色，确保同一用户始终显示相同颜色
         var hash = userName.GetHashCode();
         var index = Math.Abs(hash) % UserColors.Length;
         return UserColors[index];
@@ -276,9 +445,16 @@
 
     public async ValueTask DisposeAsync()
     {
+        ChatService.PropertyChanged -= OnPropertyChanged;
         ChatService.MessageReceived -= OnMessageReceived;
-        ChatService.UserConnected -= OnUserConnected;
-        ChatService.UserDisconnected -= OnUserDisconnected;
+        ChatService.MessageHistoryReceived -= OnMessageHistoryReceived;
+        ChatService.UserJoined -= OnUserJoined;
+        ChatService.UserLeft -= OnUserLeft;
+        ChatService.UserListUpdated -= OnUserListUpdated;
+        ChatService.DefaultUserNameReceived -= OnDefaultUserNameReceived;
+        ChatService.ConnectionClosed -= OnConnectionClosed;
+        ChatService.Reconnected -= OnReconnected;
+        
         await ChatService.DisposeAsync();
     }
 }

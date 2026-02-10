@@ -9,6 +9,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="6.0.36" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="6.0.36" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="6.0.36" />
   </ItemGroup>
 
   <ItemGroup>
