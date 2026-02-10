@@ -1,0 +1,132 @@
+@page "/chat"
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Shared.Models
+@using Microsoft.AspNetCore.Components
+@inject ChatService ChatService
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<h3>实时聊天室</h3>
+
+<div class="chat-container">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="chat-messages" style="height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
+                @foreach (var message in _messages)
+                {
+                    <div class="message @(message.User == ChatService.GetCurrentUser() ? "own-message" : "other-message")">
+                        <strong>@message.User</strong> <small>@message.Timestamp.ToLocalTime().ToString("HH:mm")</small>
+                        <div>@message.Message</div>
+                    </div>
+                }
+            </div>
+            <div class="message-input">
+                <div class="input-group">
+                    <input @bind="_newMessage" @bind:event="oninput" @onkeypress="HandleKeyPress"
+                           placeholder="输入消息..." class="form-control" />
+                    <button @onclick="SendMessage" class="btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(_newMessage) || !ChatService.IsConnected)">发送</button>
+                </div>
+            </div>
+            <div class="connection-status mt-2">
+                状态: <span class="badge @(ChatService.IsConnected ? "bg-success" : "bg-danger")">@(ChatService.IsConnected ? "已连接" : "未连接")</span>
+                当前用户: <strong>@ChatService.GetCurrentUser()</strong>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="user-list" style="border: 1px solid #ccc; padding: 10px;">
+                <h5>在线用户</h5>
+                <ul>
+                    @foreach (var user in _connectedUsers)
+                    {
+                        <li>@user</li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ChatMessage> _messages = new();
+    private List<string> _connectedUsers = new();
+    private string _newMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await InitializeChatService();
+        await base.OnInitializedAsync();
+    }
+
+    private async Task InitializeChatService()
+    {
+        try
+        {
+            // 使用当前站点的基础 URL 来构建 SignalR Hub URL
+            var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+            var hubUrl = $"{baseUrl}/chathub";
+            Console.WriteLine($"正在连接到SignalR Hub: {hubUrl}");
+
+            await ChatService.InitializeAsync(hubUrl);
+            Console.WriteLine($"SignalR连接状态: {ChatService.IsConnected}");
+
+            ChatService.MessageReceived += OnMessageReceived;
+            ChatService.UserConnected += OnUserConnected;
+            ChatService.UserDisconnected += OnUserDisconnected;
+            
+            // Force UI refresh to show correct connection status
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SignalR连接失败: {ex.Message}");
+            Console.WriteLine($"完整错误: {ex}");
+            // 可以在这里添加用户友好的错误提示
+        }
+    }
+
+    private void OnMessageReceived(ChatMessage message)
+    {
+        _messages.Add(message);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnUserConnected(string connectionId)
+    {
+        if (!_connectedUsers.Contains(connectionId))
+        {
+            _connectedUsers.Add(connectionId);
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnUserDisconnected(string connectionId)
+    {
+        _connectedUsers.Remove(connectionId);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendMessage()
+    {
+        if (!string.IsNullOrWhiteSpace(_newMessage))
+        {
+            await ChatService.SendMessageAsync(_newMessage);
+            _newMessage = string.Empty;
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newMessage))
+        {
+            await SendMessage();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        ChatService.MessageReceived -= OnMessageReceived;
+        ChatService.UserConnected -= OnUserConnected;
+        ChatService.UserDisconnected -= OnUserDisconnected;
+        await ChatService.DisposeAsync();
+    }
+}
