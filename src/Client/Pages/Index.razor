@@ -1,73 +1,52 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Shared.Models
+@using Microsoft.AspNetCore.Components
 @page "/"
 
-<PageTitle>SignalR Chat - 实时聊天广场</PageTitle>
+<PageTitle>SignalChat - 实时聊天广场</PageTitle>
 
-<div class="landing-page">
-    <nav class="landing-nav">
-        <div class="nav-brand">
+<div class="index-page">
+    <!-- 顶部导航栏 -->
+    <header class="index-header">
+        <div class="header-brand">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
             </svg>
-            <span>SignalR Chat</span>
+            <span>SignalChat</span>
         </div>
-        <div class="nav-links">
-            <a href="#features">功能特性</a>
-            <a href="https://github.com/wubing7755/SignalRDemo" target="_blank">GitHub</a>
+        <div class="header-actions">
+            @if (ChatService.IsLoggedIn)
+            {
+                <span class="user-greeting">👤 @ChatService.CurrentUser?.DisplayName</span>
+            }
+            <button class="btn-auth" @onclick="ShowAuthModalAsync">
+                @(ChatService.IsLoggedIn ? "退出登录" : "登录/注册")
+            </button>
+            <a href="https://github.com/wubing7755/SignalRDemo" target="_blank" class="btn-github">
+                GitHub
+            </a>
         </div>
-    </nav>
+    </header>
 
-    <main class="landing-main">
-        <section class="hero-section">
-            <div class="hero-content">
-                <h1 class="hero-title">
-                    <span class="icon">💬</span>
-                    实时聊天广场
-                </h1>
-                <p class="hero-subtitle">
-                    简洁、快速、无需注册<br>
-                    即刻开始实时沟通
-                </p>
-                <a href="/chat" class="hero-button">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                    进入聊天室
-                </a>
-            </div>
-        </section>
+    <!-- 主要内容区域 -->
+    <main class="index-main">
+        <!-- 实时统计面板 -->
+        <StatsPanel RoomCount="@RoomCount" UserCount="@UserCount" OnRefresh="RefreshStatsAsync" />
 
-        <div class="divider"></div>
+        <!-- 快速开始区域 -->
+        <QuickStart 
+            OnEnterLobby="EnterLobbyAsync" 
+            OnCreateRoom="ShowCreateRoomModal" 
+            OnJoinRoom="ShowJoinRoomModal"
+            OnRoomJoined="NavigateToChat" />
 
-        <section id="features" class="features-section">
-            <h2 class="section-title">✨ 功能特性</h2>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">💬</div>
-                    <h3>实时消息</h3>
-                    <p>毫秒级消息推送，实时送达</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">👥</div>
-                    <h3>多人群聊</h3>
-                    <p>支持多个聊天室，轻松切换</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🔒</div>
-                    <h3>私密聊天</h3>
-                    <p>一对一私聊，保护隐私</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h3>快速响应</h3>
-                    <p>SignalR 驱动，极速体验</p>
-                </div>
-            </div>
-        </section>
+        <!-- 推荐公共房间 -->
+        <FeaturedRooms OnRoomJoined="NavigateToChat" />
     </main>
 
-    <footer class="landing-footer">
-        <p>© 2026 SignalR Chat Demo</p>
+    <!-- 底部 -->
+    <footer class="index-footer">
+        <p>© 2026 SignalChat</p>
         <div class="footer-links">
             <a href="https://github.com/wubing7755/SignalRDemo" target="_blank">GitHub</a>
             <span class="separator">|</span>
@@ -76,183 +55,199 @@
     </footer>
 </div>
 
+<!-- 弹窗组件 -->
+<AuthModal IsOpen="_showAuthModal" OnAuthStateChanged="OnAuthStateChangedAsync" />
+<CreateRoomModal IsOpen="_showCreateRoomModal" OnRoomCreated="OnRoomCreatedAsync" />
+<JoinRoomModal IsOpen="_showJoinRoomModal" OnRoomJoined="OnRoomJoinedAsync" />
+
+@code {
+    [Inject] private ChatService ChatService { get; set; } = null!;
+    [Inject] private NavigationManager Navigation { get; set; } = null!;
+
+    private int RoomCount { get; set; }
+    private int UserCount { get; set; }
+
+    private bool _showAuthModal;
+    private bool _showCreateRoomModal;
+    private bool _showJoinRoomModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshStatsAsync();
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        try
+        {
+            var rooms = await ChatService.GetRoomsAsync();
+            RoomCount = rooms.Count;
+            UserCount = rooms.Sum(r => r.MemberCount);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"刷新统计数据失败: {ex.Message}");
+            RoomCount = 0;
+            UserCount = 0;
+        }
+    }
+
+    private async Task EnterLobbyAsync()
+    {
+        try
+        {
+            var rooms = await ChatService.GetRoomsAsync();
+            var lobbyRoom = rooms.FirstOrDefault(r => r.Name == "大厅" || r.IsPublic);
+            if (lobbyRoom != null)
+            {
+                await ChatService.JoinRoomAsync(lobbyRoom.Id);
+                NavigateToChat(lobbyRoom.Id);
+            }
+            else
+            {
+                Navigation.NavigateTo("/chat");
+            }
+        }
+        catch
+        {
+            Navigation.NavigateTo("/chat");
+        }
+    }
+
+    private void ShowCreateRoomModal()
+    {
+        _showCreateRoomModal = true;
+    }
+
+    private void ShowJoinRoomModal()
+    {
+        _showJoinRoomModal = true;
+    }
+
+    private async Task ShowAuthModalAsync()
+    {
+        if (ChatService.IsLoggedIn)
+        {
+            await ChatService.LogoutAsync();
+        }
+        else
+        {
+            _showAuthModal = true;
+        }
+    }
+
+    private void NavigateToChat(string roomId)
+    {
+        Navigation.NavigateTo($"/chat?room={roomId}");
+    }
+
+    private async Task OnAuthStateChangedAsync(bool isOpen)
+    {
+        _showAuthModal = isOpen;
+        await Task.CompletedTask;
+    }
+
+    private async Task OnRoomCreatedAsync(string roomId)
+    {
+        _showCreateRoomModal = false;
+        await RefreshStatsAsync();
+        NavigateToChat(roomId);
+    }
+
+    private async Task OnRoomJoinedAsync(string roomId)
+    {
+        _showJoinRoomModal = false;
+        NavigateToChat(roomId);
+    }
+}
+
 <style>
-    /* Landing Page 样式 - 多彩像素风 */
-    .landing-page {
+    /* 首页样式 - 宝可梦风格配色 */
+    .index-page {
         min-height: 100vh;
         display: flex;
         flex-direction: column;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        color: #fff;
+        background: var(--bg-primary);
+        color: var(--text-primary);
     }
 
-    .landing-nav {
+    .index-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1.5rem 3rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 1rem 2rem;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+        box-shadow: var(--shadow-sm);
     }
 
-    .nav-brand {
+    .header-brand {
         display: flex;
         align-items: center;
         gap: 0.75rem;
         font-size: 1.5rem;
         font-weight: 600;
-        background: linear-gradient(90deg, #667eea, #764ba2);
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
     }
 
-    .nav-links {
-        display: flex;
-        gap: 2rem;
-    }
-
-    .nav-links a {
-        color: rgba(255, 255, 255, 0.8);
-        text-decoration: none;
-        transition: color 0.2s;
-    }
-
-    .nav-links a:hover {
-        color: #43e97b;
-    }
-
-    .landing-main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 3rem 2rem;
-    }
-
-    .hero-section {
-        text-align: center;
-        padding: 4rem 2rem;
-        max-width: 800px;
-    }
-
-    .hero-title {
-        font-size: 3.5rem;
-        font-weight: 700;
-        margin-bottom: 1.5rem;
+    .header-actions {
         display: flex;
         align-items: center;
-        justify-content: center;
         gap: 1rem;
-        background: linear-gradient(90deg, #667eea, #764ba2, #fa709a);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
     }
 
-    .hero-subtitle {
-        font-size: 1.25rem;
-        color: rgba(255, 255, 255, 0.7);
-        margin-bottom: 3rem;
-        line-height: 1.8;
+    .user-greeting {
+        color: var(--text-secondary);
+        font-weight: 500;
     }
 
-    .hero-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 1rem 2.5rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: #fff;
-        text-decoration: none;
-        border-radius: 50px;
-        font-size: 1.25rem;
-        font-weight: 600;
-        transition: transform 0.2s, box-shadow 0.2s;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    .btn-auth {
+        padding: 0.5rem 1.25rem;
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        color: white;
+        border: none;
+        border-radius: var(--radius-md);
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
     }
 
-    .hero-button:hover {
+    .btn-auth:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
+        box-shadow: var(--shadow-md);
     }
 
-    .divider {
+    .btn-github {
+        padding: 0.5rem 1.25rem;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        text-decoration: none;
+        border-radius: var(--radius-md);
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .btn-github:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+    .index-main {
+        flex: 1;
+        max-width: 1200px;
         width: 100%;
-        max-width: 600px;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.5), transparent);
-        margin: 2rem 0;
-    }
-
-    .features-section {
-        text-align: center;
-        padding: 3rem 0;
-        width: 100%;
-        max-width: 1000px;
-    }
-
-    .section-title {
-        font-size: 2rem;
-        margin-bottom: 3rem;
-        background: linear-gradient(90deg, #43e97b, #38f9d7);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    .features-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 2rem;
-    }
-
-    .feature-card {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
+        margin: 0 auto;
         padding: 2rem;
-        transition: transform 0.2s, background 0.2s, border-color 0.2s;
     }
 
-    .feature-card:hover {
-        transform: translateY(-5px);
-        background: rgba(255, 255, 255, 0.08);
-    }
-
-    .feature-card:nth-child(1):hover { border-color: rgba(102, 126, 234, 0.5); }
-    .feature-card:nth-child(2):hover { border-color: rgba(67, 233, 123, 0.5); }
-    .feature-card:nth-child(3):hover { border-color: rgba(250, 112, 154, 0.5); }
-    .feature-card:nth-child(4):hover { border-color: rgba(254, 225, 64, 0.5); }
-
-    .feature-icon {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-    }
-
-    .feature-card:nth-child(1) .feature-icon { filter: drop-shadow(0 0 10px rgba(102, 126, 234, 0.5)); }
-    .feature-card:nth-child(2) .feature-icon { filter: drop-shadow(0 0 10px rgba(67, 233, 123, 0.5)); }
-    .feature-card:nth-child(3) .feature-icon { filter: drop-shadow(0 0 10px rgba(250, 112, 154, 0.5)); }
-    .feature-card:nth-child(4) .feature-icon { filter: drop-shadow(0 0 10px rgba(254, 225, 64, 0.5)); }
-
-    .feature-card h3 {
-        font-size: 1.25rem;
-        margin-bottom: 0.5rem;
-        background: linear-gradient(90deg, #667eea, #43e97b);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    .feature-card p {
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 0.9rem;
-    }
-
-    .landing-footer {
+    .index-footer {
         text-align: center;
-        padding: 2rem;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.5);
+        padding: 1.5rem;
+        border-top: 1px solid var(--border-color);
+        color: var(--text-muted);
     }
 
     .footer-links {
@@ -260,34 +255,34 @@
     }
 
     .footer-links a {
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--primary);
         text-decoration: none;
-        transition: color 0.2s;
     }
 
     .footer-links a:hover {
-        color: #667eea;
+        text-decoration: underline;
     }
 
     .separator {
-        margin: 0 1rem;
+        margin: 0 0.75rem;
+        color: var(--border-color);
     }
 
     @@media (max-width: 768px) {
-        .landing-nav {
-            padding: 1rem 1.5rem;
+        .index-header {
+            padding: 1rem;
+            flex-direction: column;
+            gap: 1rem;
         }
 
-        .hero-title {
-            font-size: 2.5rem;
+        .header-actions {
+            width: 100%;
+            justify-content: center;
         }
 
-        .hero-subtitle {
-            font-size: 1rem;
-        }
-
-        .features-grid {
-            grid-template-columns: repeat(2, 1fr);
+        .index-main {
+            padding: 1rem;
         }
     }
 </style>
+
