@@ -35,7 +35,11 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     private string _currentUser = string.Empty;
     private ConnectionState _state = ConnectionState.Disconnected;
     private readonly DebounceService _debounceService = new();
+    private readonly ThrottleService _throttleService = new();
     private readonly ILogger<ChatService> _logger;
+    
+    // 节流相关事件
+    public event Action<bool>? ThrottledChanged;
 
     /// <summary>
     /// 构造函数
@@ -181,7 +185,7 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// 发送消息（带防抖）
+    /// 发送消息（带防抖和节流）
     /// </summary>
     public async Task SendMessageAsync(string messageText)
     {
@@ -190,30 +194,38 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
             return;
         }
 
+        // 防抖：100ms 内快速点击只发送最后一条
         await _debounceService.DebounceAsync(async () =>
         {
-            if (_hubConnection?.State != HubConnectionState.Connected)
+            // 节流：每 1 秒最多发送 1 条消息（防止刷屏）
+            var sent = _throttleService.Throttle(async () =>
             {
-                _logger.LogWarning("SignalR connection is not established. Message not sent.");
-                return;
-            }
-
-            try
-            {
-                var chatMessage = new ChatMessage
+                if (_hubConnection?.State != HubConnectionState.Connected)
                 {
-                    User = CurrentUser,
-                    Message = messageText.Trim(),
-                    Timestamp = DateTime.UtcNow
-                };
+                    _logger.LogWarning("SignalR connection is not established. Message not sent.");
+                    return;
+                }
 
-                await _hubConnection.SendAsync("SendMessage", chatMessage);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send message");
-                throw;
-            }
+                try
+                {
+                    var chatMessage = new ChatMessage
+                    {
+                        User = CurrentUser,
+                        Message = messageText.Trim(),
+                        Timestamp = DateTime.UtcNow
+                    };
+
+                    await _hubConnection.SendAsync("SendMessage", chatMessage);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send message");
+                    throw;
+                }
+            }, intervalMilliseconds: 1000); // 1秒节流间隔
+            
+            // 通知 UI 是否被节流（false = 已发送，true = 被阻止）
+            ThrottledChanged?.Invoke(!sent);
         }, delayMilliseconds: 100); // 100ms 防抖
     }
 

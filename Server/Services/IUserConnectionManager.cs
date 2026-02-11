@@ -1,16 +1,7 @@
 using System.Collections.Concurrent;
+using SignalRDemo.Shared.Models;
 
 namespace SignalRDemo.Server.Services;
-
-/// <summary>
-/// 用户连接信息
-/// </summary>
-public class UserConnectionInfo
-{
-    public string ConnectionId { get; set; } = string.Empty;
-    public string UserName { get; set; } = string.Empty;
-    public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
-}
 
 /// <summary>
 /// 用户连接管理器接口
@@ -35,7 +26,7 @@ public interface IUserConnectionManager
     /// <summary>
     /// 获取所有在线用户列表
     /// </summary>
-    IReadOnlyList<UserConnectionInfo> GetAllConnections();
+    IReadOnlyList<UserConnection> GetAllConnections();
     
     /// <summary>
     /// 获取在线用户数量
@@ -59,18 +50,18 @@ public interface IUserConnectionManager
 public class UserConnectionManager : IUserConnectionManager
 {
     // 使用 ConcurrentDictionary 保证线程安全
-    private readonly ConcurrentDictionary<string, UserConnectionInfo> _connections = new();
+    private readonly ConcurrentDictionary<string, UserConnection> _connections = new();
 
     public void AddConnection(string connectionId, string userName)
     {
-        var info = new UserConnectionInfo
+        var connection = new UserConnection
         {
             ConnectionId = connectionId,
             UserName = userName,
             ConnectedAt = DateTime.UtcNow
         };
         
-        _connections[connectionId] = info;
+        _connections[connectionId] = connection;
     }
 
     public void RemoveConnection(string connectionId)
@@ -80,10 +71,10 @@ public class UserConnectionManager : IUserConnectionManager
 
     public string? GetUserName(string connectionId)
     {
-        return _connections.TryGetValue(connectionId, out var info) ? info.UserName : null;
+        return _connections.TryGetValue(connectionId, out var connection) ? connection.UserName : null;
     }
 
-    public IReadOnlyList<UserConnectionInfo> GetAllConnections()
+    public IReadOnlyList<UserConnection> GetAllConnections()
     {
         return _connections.Values.OrderBy(c => c.UserName).ToList().AsReadOnly();
     }
@@ -101,9 +92,9 @@ public class UserConnectionManager : IUserConnectionManager
 
     public void UpdateUserName(string connectionId, string newUserName)
     {
-        if (_connections.TryGetValue(connectionId, out var info))
+        if (_connections.TryGetValue(connectionId, out var connection))
         {
-            info.UserName = newUserName;
+            connection.UserName = newUserName;
         }
     }
 }

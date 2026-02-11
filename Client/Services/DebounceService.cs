@@ -7,6 +7,7 @@ public class DebounceService : IDisposable
 {
     private CancellationTokenSource? _cancellationTokenSource;
     private readonly object _lock = new();
+    private bool _disposed;
 
     /// <summary>
     /// 执行防抖操作
@@ -76,11 +77,32 @@ public class DebounceService : IDisposable
 
     public void Dispose()
     {
-        lock (_lock)
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
         {
-            _cancellationTokenSource?.Cancel();
-            _cancellationTokenSource?.Dispose();
+            return;
         }
+
+        if (disposing)
+        {
+            lock (_lock)
+            {
+                _cancellationTokenSource?.Cancel();
+                _cancellationTokenSource?.Dispose();
+            }
+        }
+
+        _disposed = true;
+    }
+
+    ~DebounceService()
+    {
+        Dispose(false);
     }
 }
 
@@ -91,11 +113,16 @@ public class ThrottleService : IDisposable
 {
     private DateTime _lastExecutionTime = DateTime.MinValue;
     private readonly object _lock = new();
+    private bool _disposed;
+    private const int DefaultInterval = 1000;
 
     /// <summary>
     /// 执行节流操作
     /// </summary>
-    public void Throttle(Action action, int intervalMilliseconds = 1000)
+    /// <param name="action">要执行的操作</param>
+    /// <param name="intervalMilliseconds">最小间隔时间（毫秒）</param>
+    /// <returns>如果执行了操作返回 true，否则返回 false</returns>
+    public bool Throttle(Action action, int intervalMilliseconds = DefaultInterval)
     {
         lock (_lock)
         {
@@ -106,12 +133,61 @@ public class ThrottleService : IDisposable
             {
                 _lastExecutionTime = now;
                 action();
+                return true;
             }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 检查是否允许执行（不执行操作）
+    /// </summary>
+    /// <param name="intervalMilliseconds">最小间隔时间（毫秒）</param>
+    /// <returns>如果允许执行返回 true，否则返回 false</returns>
+    public bool CanExecute(int intervalMilliseconds = DefaultInterval)
+    {
+        lock (_lock)
+        {
+            var now = DateTime.UtcNow;
+            var elapsed = (now - _lastExecutionTime).TotalMilliseconds;
+            return elapsed >= intervalMilliseconds;
+        }
+    }
+
+    /// <summary>
+    /// 重置节流计时器
+    /// </summary>
+    public void Reset()
+    {
+        lock (_lock)
+        {
+            _lastExecutionTime = DateTime.MinValue;
         }
     }
 
     public void Dispose()
     {
-        // 无需特殊清理
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            // 无需特殊清理
+        }
+
+        _disposed = true;
+    }
+
+    ~ThrottleService()
+    {
+        Dispose(false);
     }
 }
