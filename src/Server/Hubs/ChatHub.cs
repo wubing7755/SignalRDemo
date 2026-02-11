@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.SignalR;
 using SignalRDemo.Server.Services;
 using SignalRDemo.Shared.Models;
@@ -30,6 +31,26 @@ public class ChatHub : Hub
     }
 
     #region 用户认证
+
+    /// <summary>
+    /// 获取当前用户信息（统一从 ConnectionManager 获取，确保一致性）
+    /// </summary>
+    private (string? UserId, string? UserName) GetCurrentUser()
+    {
+        // 优先从 ConnectionManager 获取（SignalR 直连方式）
+        var userId = _connectionManager.GetUserId(Context.ConnectionId);
+        var userName = _connectionManager.GetUserName(Context.ConnectionId);
+        
+        // 如果 ConnectionManager 中没有，尝试从 Claims 获取（REST API + JWT 方式）
+        if (string.IsNullOrEmpty(userId))
+        {
+            userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+            userName = Context.User?.FindFirstValue(ClaimTypes.Name) 
+                ?? Context.User?.FindFirstValue("display_name");
+        }
+        
+        return (userId, userName);
+    }
 
     /// <summary>
     /// 用户注册
@@ -154,7 +175,13 @@ public class ChatHub : Hub
             displayName = displayName[..maxLength];
         }
 
-        var userId = _connectionManager.GetUserId(Context.ConnectionId);
+        // 从 Claims 中获取用户信息（支持 REST API 登录）
+        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            userId = _connectionManager.GetUserId(Context.ConnectionId);
+        }
+        
         if (string.IsNullOrEmpty(userId))
         {
             await Clients.Caller.SendAsync("DisplayNameResult", new { Success = false, Message = "请先登录" });
@@ -195,7 +222,8 @@ public class ChatHub : Hub
     /// </summary>
     public async Task<ChatRoom> CreateRoom(CreateRoomRequest request)
     {
-        var userId = _connectionManager.GetUserId(Context.ConnectionId);
+        // 使用统一的方法获取当前用户信息
+        var (userId, userName) = GetCurrentUser();
         
         if (string.IsNullOrEmpty(userId))
         {
@@ -276,12 +304,123 @@ public class ChatHub : Hub
     }
 
     /// <summary>
+    /// 通过房间名称加入房间
+    /// </summary>
+    public async Task<JoinRoomResponse> JoinRoomByName(string roomName, string? password)
+    {
+        // 使用统一的方法获取当前用户信息
+        var (userId, userName) = GetCurrentUser();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return new JoinRoomResponse
+            {
+                Success = false,
+                Message = "请先登录"
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(roomName))
+        {
+            return new JoinRoomResponse
+            {
+                Success = false,
+                Message = "请输入房间名称"
+            };
+        }
+
+        // 根据房间名称查找房间（精确匹配，不区分大小写）
+        var room = await _roomService.GetRoomByNameAsync(roomName);
+        if (room == null)
+        {
+            return new JoinRoomResponse
+            {
+                Success = false,
+                Message = $"未找到名为 '{roomName}' 的房间"
+            };
+        }
+
+        // 验证密码（如果是私人房间）
+        if (!room.IsPublic)
+        {
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                return new JoinRoomResponse
+                {
+                    Success = false,
+                    Message = "该房间需要密码"
+                };
+            }
+            
+            var isValid = await _roomService.VerifyPasswordAsync(room.Id, password);
+            if (!isValid)
+            {
+                return new JoinRoomResponse
+                {
+                    Success = false,
+                    Message = "房间密码错误"
+                };
+            }
+        }
+
+        // 添加用户到房间
+        var added = await _roomService.AddUserToRoomAsync(userId, room.Id);
+        if (!added)
+        {
+            return new JoinRoomResponse
+            {
+                Success = false,
+                Message = "加入房间失败"
+            };
+        }
+
+        // 加入 SignalR 分组
+        await Groups.AddToGroupAsync(Context.ConnectionId, room.Id);
+
+        // 广播用户加入消息
+        var joinMessage = new ChatMessage
+        {
+            Id = Guid.NewGuid().ToString(),
+            UserId = userId,
+            UserName = userName ?? "未知用户",
+            RoomId = room.Id,
+            Message = $"欢迎 {userName ?? "未知用户"} 加入房间",
+            Timestamp = DateTime.UtcNow
+        };
+        await Clients.Group(room.Id).SendAsync("ReceiveMessage", joinMessage);
+
+        _logger.LogInformation("用户 {UserName} (ID: {UserId}) 通过房间名称加入房间 {RoomName} (ID: {RoomId})", 
+            userName, userId, room.Name, room.Id);
+
+        return new JoinRoomResponse
+        {
+            Success = true,
+            Message = $"成功加入房间 '{room.Name}'",
+            Room = room
+        };
+    }
+
+    /// <summary>
+    /// 搜索房间（根据名称模糊搜索）
+    /// </summary>
+    public async Task<List<ChatRoom>> SearchRoomsByName(string roomName)
+    {
+        if (string.IsNullOrWhiteSpace(roomName))
+        {
+            return new List<ChatRoom>();
+        }
+
+        var rooms = await _roomService.FindRoomsByNameAsync(roomName);
+        return rooms;
+    }
+
+    /// <summary>
     /// 加入房间
     /// </summary>
     public async Task<JoinRoomResponse> JoinRoom(JoinRoomRequest request)
     {
-        var userId = _connectionManager.GetUserId(Context.ConnectionId);
-        var userName = _connectionManager.GetUserName(Context.ConnectionId);
+        // 使用统一的方法获取当前用户信息
+        var (userId, userName) = GetCurrentUser();
 
         if (string.IsNullOrEmpty(userId))
         {
@@ -342,6 +481,9 @@ public class ChatHub : Hub
         };
         await Clients.Group(room.Id).SendAsync("ReceiveMessage", joinMessage);
 
+        // 广播房间用户列表更新
+        await BroadcastRoomUserListAsync(room.Id);
+
         _logger.LogInformation("用户 {UserName} (ID: {UserId}) 加入房间 {RoomName} (ID: {RoomId})", 
             userName, userId, room.Name, room.Id);
 
@@ -351,6 +493,43 @@ public class ChatHub : Hub
             Message = $"成功加入房间 '{room.Name}'",
             Room = room
         };
+    }
+
+    /// <summary>
+    /// 获取房间用户列表
+    /// </summary>
+    public async Task<List<string>> GetRoomUsers(string roomId)
+    {
+        var room = await _roomService.GetRoomByIdAsync(roomId);
+        if (room == null)
+        {
+            return new List<string>();
+        }
+
+        // 获取房间中的所有用户ID
+        var userIds = await _roomService.GetRoomUserIdsAsync(roomId);
+        
+        // 获取用户名列表
+        var userNames = new List<string>();
+        foreach (var uid in userIds)
+        {
+            var user = await _userService.GetUserByIdAsync(uid);
+            if (user != null)
+            {
+                userNames.Add(user.GetDisplayName());
+            }
+        }
+
+        return userNames;
+    }
+
+    /// <summary>
+    /// 广播房间用户列表
+    /// </summary>
+    private async Task BroadcastRoomUserListAsync(string roomId)
+    {
+        var userNames = await GetRoomUsers(roomId);
+        await Clients.Group(roomId).SendAsync("RoomUserListUpdated", userNames);
     }
 
     /// <summary>
@@ -417,8 +596,17 @@ public class ChatHub : Hub
     /// </summary>
     public async Task SendRoomMessage(SendMessageRequest request)
     {
-        var userId = _connectionManager.GetUserId(Context.ConnectionId);
-        var userName = _connectionManager.GetUserName(Context.ConnectionId);
+        // 从 Claims 中获取用户信息（支持 REST API 登录）
+        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userName = Context.User?.FindFirstValue(ClaimTypes.Name) 
+            ?? Context.User?.FindFirstValue("display_name");
+        
+        // 如果 Claims 中没有用户信息，尝试从 connectionManager 获取
+        if (string.IsNullOrEmpty(userId))
+        {
+            userId = _connectionManager.GetUserId(Context.ConnectionId);
+            userName = _connectionManager.GetUserName(Context.ConnectionId);
+        }
 
         if (string.IsNullOrEmpty(userId))
         {
@@ -478,11 +666,22 @@ public class ChatHub : Hub
     /// </summary>
     public async Task<List<ChatMessage>> GetRoomMessages(string roomId, int count = 50)
     {
-        var userId = _connectionManager.GetUserId(Context.ConnectionId);
+        var (userId, _) = GetCurrentUser();
 
         if (string.IsNullOrEmpty(userId))
         {
             return new List<ChatMessage>();
+        }
+
+        // 检查用户是否在房间中（公共房间"lobby"除外）
+        if (roomId != "lobby")
+        {
+            var isInRoom = await _roomService.IsUserInRoomAsync(userId, roomId);
+            if (!isInRoom)
+            {
+                await Clients.Caller.SendAsync("Error", "您不在该房间中，无法查看消息历史");
+                return new List<ChatMessage>();
+            }
         }
 
         var messages = await _chatRepository.GetRoomMessagesAsync(roomId, count);
@@ -572,18 +771,38 @@ public class ChatHub : Hub
     {
         try
         {
-            var defaultUserName = $"User_{Guid.NewGuid().ToString()[..4]}";
+            // 首先检查 JWT Token 中是否有用户信息（REST API 登录方式）
+            var userIdFromJwt = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userNameFromJwt = Context.User?.FindFirstValue(ClaimTypes.Name) 
+                ?? Context.User?.FindFirstValue("display_name");
             
-            _connectionManager.AddConnection(Context.ConnectionId, defaultUserName);
-            
-            await Clients.Caller.SendAsync("SetDefaultUserName", defaultUserName);
-            
-            await BroadcastUserListAsync();
-            
-            await Clients.Others.SendAsync("UserJoined", defaultUserName);
-            
-            _logger.LogInformation("用户已连接: {UserName} (Connection: {ConnectionId})", 
-                defaultUserName, Context.ConnectionId);
+            if (!string.IsNullOrEmpty(userIdFromJwt) && !string.IsNullOrEmpty(userNameFromJwt))
+            {
+                // JWT 认证用户：使用 JWT 中的用户信息
+                _connectionManager.AddConnection(Context.ConnectionId, userNameFromJwt);
+                _connectionManager.SetUserId(Context.ConnectionId, userIdFromJwt);
+                
+                await Clients.Caller.SendAsync("SetDefaultUserName", userNameFromJwt);
+                await BroadcastUserListAsync();
+                await Clients.Others.SendAsync("UserJoined", userNameFromJwt);
+                
+                _logger.LogInformation("JWT认证用户已连接: {UserName} (ID: {UserId}, Connection: {ConnectionId})", 
+                    userNameFromJwt, userIdFromJwt, Context.ConnectionId);
+            }
+            else
+            {
+                // 匿名用户：生成默认用户名
+                var defaultUserName = $"User_{Guid.NewGuid().ToString()[..4]}";
+                
+                _connectionManager.AddConnection(Context.ConnectionId, defaultUserName);
+                
+                await Clients.Caller.SendAsync("SetDefaultUserName", defaultUserName);
+                await BroadcastUserListAsync();
+                await Clients.Others.SendAsync("UserJoined", defaultUserName);
+                
+                _logger.LogInformation("匿名用户已连接: {UserName} (Connection: {ConnectionId})", 
+                    defaultUserName, Context.ConnectionId);
+            }
         }
         catch (Exception ex)
         {
@@ -602,6 +821,12 @@ public class ChatHub : Hub
         {
             var userName = _connectionManager.GetUserName(Context.ConnectionId);
             var userId = _connectionManager.GetUserId(Context.ConnectionId);
+            
+            // 用户断开连接时，自动从所有加入的房间中移除
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await LeaveAllRoomsAsync(userId, userName);
+            }
             
             _connectionManager.RemoveConnection(Context.ConnectionId);
             
@@ -630,7 +855,57 @@ public class ChatHub : Hub
         await base.OnDisconnectedAsync(exception);
     }
 
+    /// <summary>
+    /// 用户断开连接时，自动从所有房间中移除
+    /// </summary>
+    private async Task LeaveAllRoomsAsync(string userId, string? userName)
+    {
+        try
+        {
+            // 获取用户加入的所有房间
+            var userRooms = await _roomService.GetUserRoomsAsync(userId);
+            
+            foreach (var room in userRooms)
+            {
+                // 从房间移除用户
+                await _roomService.RemoveUserFromRoomAsync(userId, room.Id);
+                
+                // 离开 SignalR 分组
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, room.Id);
+                
+                // 广播用户离开消息
+                var leaveMessage = new ChatMessage
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserId = userId,
+                    UserName = userName ?? "未知用户",
+                    RoomId = room.Id,
+                    Message = $"{userName ?? "未知用户"} 离开了房间",
+                    Timestamp = DateTime.UtcNow
+                };
+                await Clients.Group(room.Id).SendAsync("ReceiveMessage", leaveMessage);
+                
+                _logger.LogInformation("用户断开连接，自动离开房间: {UserName} -> {RoomName}", 
+                    userName, room.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "用户断开连接时清理房间成员失败: {UserId}", userId);
+        }
+    }
+
     #endregion
+
+    /// <summary>
+    /// 获取在线用户列表
+    /// </summary>
+    public async Task GetOnlineUsers()
+    {
+        var connections = _connectionManager.GetAllConnections();
+        var userNames = connections.Select(c => c.UserName).ToList();
+        await Clients.Caller.SendAsync("UpdateUserList", userNames);
+    }
 
     /// <summary>
     /// 广播在线用户列表

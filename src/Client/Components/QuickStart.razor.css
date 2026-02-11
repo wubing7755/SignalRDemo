@@ -1,21 +1,25 @@
-/* QuickStart 组件样式 */
+/* ========================================
+   QuickStart 组件样式
+   使用全局 CSS 变量
+======================================== */
+
 .quick-start {
-    background: var(--bg-secondary, #fff);
-    border-radius: var(--radius-lg, 20px);
-    padding: 1.5rem;
-    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.1));
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-md);
 }
 
 .quick-start-header {
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--spacing-md);
     text-align: center;
 }
 
 .quick-start-header h2 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.5rem;
-    color: var(--text-primary, #212529);
-    background: linear-gradient(135deg, var(--primary, #6c5ce7), var(--accent-blue, #4dabf7));
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: var(--font-size-2xl);
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, var(--color-primary), var(--color-accent-blue));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -23,32 +27,32 @@
 
 .quick-start-header p {
     margin: 0;
-    color: var(--text-muted, #868e96);
-    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
 }
 
 .quick-start-actions {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
 }
 
 .action-card {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-    background: var(--bg-tertiary, #e9ecef);
-    border-radius: var(--radius-md, 12px);
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all var(--transition-normal, 0.25s ease);
+    transition: all var(--transition-normal);
     border: 2px solid transparent;
 }
 
 .action-card:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.1));
+    box-shadow: var(--shadow-md);
 }
 
 .action-card.primary {
@@ -57,12 +61,12 @@
 }
 
 .action-card.primary:hover {
-    border-color: var(--primary, #6c5ce7);
+    border-color: var(--color-primary);
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
 }
 
 .action-card.primary .action-icon {
-    color: var(--primary, #6c5ce7);
+    color: var(--color-primary);
 }
 
 .action-card.success {
@@ -71,12 +75,12 @@
 }
 
 .action-card.success:hover {
-    border-color: var(--accent-green, #51cf66);
+    border-color: var(--color-accent-green);
     background: linear-gradient(135deg, rgba(81, 207, 102, 0.15), rgba(34, 184, 207, 0.15));
 }
 
 .action-card.success .action-icon {
-    color: var(--accent-green, #51cf66);
+    color: var(--color-accent-green);
 }
 
 .action-card.info {
@@ -85,22 +89,22 @@
 }
 
 .action-card.info:hover {
-    border-color: var(--accent-blue, #4dabf7);
+    border-color: var(--color-accent-blue);
     background: linear-gradient(135deg, rgba(77, 171, 247, 0.15), rgba(190, 75, 219, 0.15));
 }
 
 .action-card.info .action-icon {
-    color: var(--accent-blue, #4dabf7);
+    color: var(--color-accent-blue);
 }
 
 .action-icon {
     width: 56px;
     height: 56px;
-    border-radius: var(--radius-md, 12px);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-secondary, #fff);
+    background: var(--color-bg-secondary);
     flex-shrink: 0;
 }
 
@@ -110,16 +114,16 @@
 }
 
 .action-content h3 {
-    margin: 0 0 0.25rem 0;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-primary, #212529);
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
 }
 
 .action-content p {
     margin: 0;
-    font-size: 0.85rem;
-    color: var(--text-muted, #868e96);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
 }
 
 .action-arrow {
@@ -129,46 +133,46 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted, #868e96);
-    transition: all var(--transition-fast, 0.15s ease);
+    color: var(--color-text-muted);
+    transition: all var(--transition-fast);
 }
 
 .action-card:hover .action-arrow {
-    color: var(--primary, #6c5ce7);
-    background: var(--bg-secondary, #fff);
+    color: var(--color-primary);
+    background: var(--color-bg-secondary);
     transform: translateX(4px);
 }
 
 /* 快捷链接 */
 .quick-links {
-    border-top: 1px solid var(--border-light, #e9ecef);
-    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border-light);
+    padding-top: var(--spacing-md);
 }
 
 .quick-links h4 {
-    margin: 0 0 1rem 0;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-secondary, #495057);
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
 }
 
 .links-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
+    gap: var(--spacing-sm);
 }
 
 .quick-link {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    background: var(--bg-tertiary, #e9ecef);
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+    background: var(--color-bg-tertiary);
     border: none;
-    border-radius: var(--radius-md, 12px);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all var(--transition-fast, 0.15s ease);
+    transition: all var(--transition-fast);
 }
 
 .quick-link:hover {
@@ -177,13 +181,13 @@
 }
 
 .link-icon {
-    font-size: 1.5rem;
+    font-size: var(--font-size-xl);
 }
 
 .link-name {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-primary, #212529);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -192,33 +196,33 @@
 }
 
 .link-count {
-    font-size: 0.75rem;
-    color: var(--text-muted, #868e96);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
 }
 
 /* 响应式 */
 @media (max-width: 768px) {
     .quick-start {
-        padding: 1rem;
+        padding: var(--spacing-md);
     }
-
+    
     .action-card {
-        padding: 0.75rem 1rem;
+        padding: var(--spacing-sm) var(--spacing-md);
     }
-
+    
     .action-icon {
         width: 48px;
         height: 48px;
     }
-
+    
     .action-content h3 {
-        font-size: 1rem;
+        font-size: var(--font-size-base);
     }
-
+    
     .action-content p {
-        font-size: 0.8rem;
+        font-size: var(--font-size-xs);
     }
-
+    
     .links-grid {
         grid-template-columns: repeat(2, 1fr);
     }

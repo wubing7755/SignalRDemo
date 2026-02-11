@@ -38,15 +38,29 @@ public class Program
                 ValidAudience = jwtSettings["Audience"] ?? "SignalRDemoClients",
                 IssuerSigningKey = key
             };
+            
+            // SignalR 通过 Query String 传递 JWT Token
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        context.Token = accessToken;
+                    }
+                    return Task.CompletedTask;
+                }
+            };
         });
 
         builder.Services.AddAuthorization();
 
-        // 注册聊天服务
-        builder.Services.AddSingleton<IChatRepository, InMemoryChatRepository>();
+        // 注册聊天服务 - 使用 JSON 文件持久化
+        builder.Services.AddSingleton<IChatRepository, JsonChatRepository>();
         builder.Services.AddSingleton<IUserConnectionManager, UserConnectionManager>();
-        builder.Services.AddSingleton<IUserService, UserService>();
-        builder.Services.AddSingleton<IRoomService, RoomService>();
+        builder.Services.AddSingleton<IUserService, JsonUserService>();
+        builder.Services.AddSingleton<IRoomService, JsonRoomService>();
         
         // SignalR 配置：添加 MessagePack 协议和优化选项
         builder.Services.AddSignalR()

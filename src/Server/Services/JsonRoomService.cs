@@ -4,43 +4,110 @@ using SignalRDemo.Shared.Models;
 namespace SignalRDemo.Server.Services;
 
 /// <summary>
-/// 房间服务实现
+/// 基于 JSON 文件的房间服务实现
 /// </summary>
-public class RoomService : IRoomService
+public class JsonRoomService : IRoomService
 {
-    private readonly List<ChatRoom> _rooms = new();
-    private readonly List<UserRoom> _userRooms = new();
+    private readonly string _dataPath;
+    private readonly string _filePath;
+    private List<ChatRoom> _rooms = new();
+    private List<UserRoom> _userRooms = new();
     private readonly ReaderWriterLockSlim _lock = new();
-    private readonly ILogger<RoomService> _logger;
+    private readonly ILogger<JsonRoomService> _logger;
+    private readonly object _saveLock = new();
 
-    public RoomService(ILogger<RoomService> logger)
+    public JsonRoomService(ILogger<JsonRoomService> logger, IWebHostEnvironment env)
     {
         _logger = logger;
-        // 创建默认大厅 - 在锁保护下进行
-        _lock.EnterWriteLock();
-        try
+        _dataPath = Path.Combine(env.ContentRootPath, "Data");
+        _filePath = Path.Combine(_dataPath, "rooms.json");
+        
+        EnsureDataDirectory();
+        LoadRooms();
+    }
+
+    private void EnsureDataDirectory()
+    {
+        if (!Directory.Exists(_dataPath))
         {
-            CreateDefaultLobby();
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
+            Directory.CreateDirectory(_dataPath);
+            _logger.LogInformation("创建数据目录: {Path}", _dataPath);
         }
     }
 
-    private void CreateDefaultLobby()
+    private void LoadRooms()
     {
-        var lobby = new ChatRoom
+        try
         {
-            Id = "lobby",
-            Name = "大厅",
-            Description = "公共聊天大厅，欢迎所有人加入",
-            OwnerId = "system",
-            IsPublic = true,
-            CreatedAt = DateTime.UtcNow,
-            MemberCount = 0
-        };
-        _rooms.Add(lobby);
+            if (File.Exists(_filePath))
+            {
+                var json = File.ReadAllText(_filePath);
+                var data = System.Text.Json.JsonSerializer.Deserialize<RoomData>(json);
+                if (data != null)
+                {
+                    _rooms = data.Rooms ?? new List<ChatRoom>();
+                    _userRooms = data.UserRooms ?? new List<UserRoom>();
+                    _logger.LogInformation("已加载 {RoomCount} 个房间, {UserRoomCount} 个用户房间关系", _rooms.Count, _userRooms.Count);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("房间数据文件不存在，将创建新文件");
+            }
+            
+            // 确保大厅存在
+            EnsureLobbyExists();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "加载房间数据失败");
+            _rooms = new List<ChatRoom>();
+            _userRooms = new List<UserRoom>();
+            EnsureLobbyExists();
+        }
+    }
+
+    private void EnsureLobbyExists()
+    {
+        if (!_rooms.Any(r => r.Id == "lobby"))
+        {
+            var lobby = new ChatRoom
+            {
+                Id = "lobby",
+                Name = "大厅",
+                Description = "公共聊天大厅，欢迎所有人加入",
+                OwnerId = "system",
+                IsPublic = true,
+                CreatedAt = DateTime.UtcNow,
+                MemberCount = 0
+            };
+            _rooms.Add(lobby);
+            SaveRooms();
+        }
+    }
+
+    private void SaveRooms()
+    {
+        lock (_saveLock)
+        {
+            try
+            {
+                var data = new RoomData
+                {
+                    Rooms = _rooms,
+                    UserRooms = _userRooms
+                };
+                var json = System.Text.Json.JsonSerializer.Serialize(data, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+                File.WriteAllText(_filePath, json);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "保存房间数据失败");
+            }
+        }
     }
 
     public Task<ChatRoom> CreateRoomAsync(string name, string? description, string ownerId, bool isPublic, string? password)
@@ -71,6 +138,7 @@ public class RoomService : IRoomService
                 Role = RoomRole.Owner
             });
 
+            SaveRooms();
             _logger.LogInformation("房间创建成功: {RoomName} (ID: {RoomId})", name, room.Id);
 
             return Task.FromResult(room);
@@ -190,6 +258,7 @@ public class RoomService : IRoomService
             });
 
             room.MemberCount++;
+            SaveRooms();
 
             _logger.LogInformation("用户 {UserId} 加入房间 {RoomId}", userId, roomId);
             return Task.FromResult(true);
@@ -218,6 +287,7 @@ public class RoomService : IRoomService
             if (room != null && room.MemberCount > 0)
             {
                 room.MemberCount--;
+                SaveRooms();
             }
 
             _logger.LogInformation("用户 {UserId} 离开房间 {RoomId}", userId, roomId);
@@ -307,6 +377,15 @@ public class RoomService : IRoomService
         {
             _lock.ExitReadLock();
         }
+    }
+
+    /// <summary>
+    /// 房间数据存储模型
+    /// </summary>
+    private class RoomData
+    {
+        public List<ChatRoom> Rooms { get; set; } = new();
+        public List<UserRoom> UserRooms { get; set; } = new();
     }
 
     /// <summary>

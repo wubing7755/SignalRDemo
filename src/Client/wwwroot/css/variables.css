@@ -1,0 +1,127 @@
+/* ========================================
+   SignalR Demo - Design Tokens
+   企业级样式变量定义层
+======================================== */
+
+/* ========================================
+   1. 颜色系统 (Color System)
+======================================== */
+
+/* 主色调 */
+:root {
+    /* Primary Colors */
+    --color-primary: #6c5ce7;
+    --color-primary-light: #a29bfe;
+    --color-primary-dark: #5849be;
+    
+    /* Accent Colors */
+    --color-accent-red: #ff6b6b;
+    --color-accent-blue: #4dabf7;
+    --color-accent-green: #51cf66;
+    --color-accent-yellow: #ffd43b;
+    --color-accent-orange: #ff922b;
+    --color-accent-pink: #f06595;
+    --color-accent-cyan: #22b8cf;
+    --color-accent-purple: #be4bdb;
+    
+    /* Background Colors */
+    --color-bg-primary: #f8f9fa;
+    --color-bg-secondary: #ffffff;
+    --color-bg-tertiary: #e9ecef;
+    --color-bg-card: #ffffff;
+    --color-bg-overlay: rgba(0, 0, 0, 0.5);
+    
+    /* Text Colors */
+    --color-text-primary: #212529;
+    --color-text-secondary: #495057;
+    --color-text-muted: #868e96;
+    --color-text-inverse: #ffffff;
+    
+    /* Border Colors */
+    --color-border-color: #dee2e6;
+    --color-border-light: #e9ecef;
+    
+    /* Status Colors */
+    --color-status-success: #51cf66;
+    --color-status-warning: #ffd43b;
+    --color-status-error: #ff6b6b;
+    --color-status-info: #4dabf7;
+
+    /* ========================================
+       2. 间距系统 (Spacing System)
+    ======================================= */
+    --spacing-xs: 0.25rem;   /* 4px */
+    --spacing-sm: 0.5rem;    /* 8px */
+    --spacing-md: 1rem;      /* 16px */
+    --spacing-lg: 1.5rem;    /* 24px */
+    --spacing-xl: 2rem;      /* 32px */
+    --spacing-2xl: 3rem;     /* 48px */
+
+    /* ========================================
+       3. 圆角系统 (Border Radius)
+    ======================================= */
+    --radius-sm: 6px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+    --radius-xl: 30px;
+    --radius-full: 9999px;
+
+    /* ========================================
+       4. 阴影系统 (Shadow System)
+    ======================================= */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.15);
+
+    /* ========================================
+       5. 过渡动画 (Transitions)
+    ======================================= */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.25s ease;
+    --transition-slow: 0.4s ease;
+
+    /* ========================================
+       6. 字体排版 (Typography)
+    ======================================= */
+    --font-family-base: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-family-system: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    
+    --font-size-xs: 0.75rem;   /* 12px */
+    --font-size-sm: 0.875rem;  /* 14px */
+    --font-size-base: 1rem;    /* 16px */
+    --font-size-lg: 1.125rem;  /* 18px */
+    --font-size-xl: 1.25rem;   /* 20px */
+    --font-size-2xl: 1.5rem;  /* 24px */
+    --font-size-3xl: 1.875rem; /* 30px */
+    
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* ========================================
+       7. Z-Index 层级 (Z-Index Scale)
+    ======================================= */
+    --z-dropdown: 100;
+    --z-modal-backdrop: 200;
+    --z-modal: 300;
+    --z-tooltip: 400;
+    --z-notification: 500;
+
+    /* ========================================
+       8. 响应式断点 (Breakpoints)
+    ======================================= */
+    --breakpoint-sm: 640px;
+    --breakpoint-md: 768px;
+    --breakpoint-lg: 1024px;
+    --breakpoint-xl: 1280px;
+
+    /* ========================================
+       9. 布局尺寸 (Layout Sizes)
+    ======================================= */
+    --sidebar-width: 260px;
+    --sidebar-width-mobile: 200px;
+    --topbar-height: 60px;
+    --topbar-height-mobile: 56px;
+}

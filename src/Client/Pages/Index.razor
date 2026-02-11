@@ -1,5 +1,7 @@
 @using SignalRDemo.Client.Services
+@using SignalRDemo.Client.Infrastructure
 @using SignalRDemo.Shared.Models
+@using SignalRDemo.Client.Components
 @using Microsoft.AspNetCore.Components
 @page "/"
 
@@ -17,11 +19,28 @@
         <div class="header-actions">
             @if (ChatService.IsLoggedIn)
             {
-                <span class="user-greeting">👤 @ChatService.CurrentUser?.DisplayName</span>
+                <div class="user-dropdown">
+                    <button class="btn-user" @onclick="ToggleUserMenu">
+                        <span class="user-avatar">👤</span>
+                        <span class="user-name">@ChatService.CurrentUser?.DisplayName</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </button>
+                    @if (_showUserMenu)
+                    {
+                        <div class="dropdown-menu">
+                            <button class="dropdown-item" @onclick="HandleLogout">
+                                退出登录
+                            </button>
+                        </div>
+                    }
+                </div>
             }
-            <button class="btn-auth" @onclick="ShowAuthModalAsync">
-                @(ChatService.IsLoggedIn ? "退出登录" : "登录/注册")
-            </button>
+            else
+            {
+                <button class="btn-auth" @onclick="ShowAuthDialogAsync">
+                    登录/注册
+                </button>
+            }
             <a href="https://github.com/wubing7755/SignalRDemo" target="_blank" class="btn-github">
                 GitHub
             </a>
@@ -30,18 +49,20 @@
 
     <!-- 主要内容区域 -->
     <main class="index-main">
-        <!-- 实时统计面板 -->
-        <StatsPanel RoomCount="@RoomCount" UserCount="@UserCount" OnRefresh="RefreshStatsAsync" />
+        <!-- 左侧：快速开始区域 -->
+        <div class="index-left">
+            <StatsPanel RoomCount="@RoomCount" UserCount="@UserCount" OnRefresh="RefreshStatsAsync" />
+            <QuickStart 
+                OnEnterLobby="EnterLobbyAsync" 
+                OnCreateRoom="ShowCreateRoomDialog" 
+                OnJoinRoom="ShowJoinRoomDialog"
+                OnRoomJoined="NavigateToChat" />
+        </div>
 
-        <!-- 快速开始区域 -->
-        <QuickStart 
-            OnEnterLobby="EnterLobbyAsync" 
-            OnCreateRoom="ShowCreateRoomModal" 
-            OnJoinRoom="ShowJoinRoomModal"
-            OnRoomJoined="NavigateToChat" />
-
-        <!-- 推荐公共房间 -->
-        <FeaturedRooms OnRoomJoined="NavigateToChat" />
+        <!-- 右侧：推荐公共房间 -->
+        <div class="index-right">
+            <FeaturedRooms OnRoomJoined="NavigateToChat" />
+        </div>
     </main>
 
     <!-- 底部 -->
@@ -55,45 +76,127 @@
     </footer>
 </div>
 
-<!-- 弹窗组件 -->
-<AuthModal IsOpen="_showAuthModal" OnAuthStateChanged="OnAuthStateChangedAsync" />
-<CreateRoomModal IsOpen="_showCreateRoomModal" OnRoomCreated="OnRoomCreatedAsync" />
-<JoinRoomModal IsOpen="_showJoinRoomModal" OnRoomJoined="OnRoomJoinedAsync" />
-
 @code {
     [Inject] private ChatService ChatService { get; set; } = null!;
+    [Inject] private AuthService AuthService { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
+    [Inject] private DialogService DialogService { get; set; } = null!;
+    [Inject] private ILogger<Index> Logger { get; set; } = null!;
+    [Inject] private HttpClient HttpClient { get; set; } = null!;
 
     private int RoomCount { get; set; }
     private int UserCount { get; set; }
+    private bool _showUserMenu;
 
-    private bool _showAuthModal;
-    private bool _showCreateRoomModal;
-    private bool _showJoinRoomModal;
+    private void ToggleUserMenu()
+    {
+        _showUserMenu = !_showUserMenu;
+    }
+
+    private async Task HandleLogout()
+    {
+        _showUserMenu = false;
+        // 清除用户状态
+        ChatService.ClearCurrentUser();
+        // 清除 Token
+        await AuthService.LogoutAsync();
+    }
 
     protected override async Task OnInitializedAsync()
     {
+        // 通用设计：先通过 HTTP API 获取统计数据（快速，不依赖 SignalR）
         await RefreshStatsAsync();
+        
+        // 然后异步初始化 SignalR（不阻塞页面加载）
+        _ = InitializeSignalRConnectionAsync();
+        
+        // 监听登录状态变化，登录成功后刷新统计数据
+        ChatService.AuthStateChanged += OnAuthStateChanged;
+    }
+    
+    /// <summary>
+    /// 登录状态变化处理
+    /// </summary>
+    private async void OnAuthStateChanged(User? user)
+    {
+        if (user != null)
+        {
+            Logger.LogInformation("用户登录成功，刷新统计数据");
+            await RefreshStatsAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+    
+    /// <summary>
+    /// 初始化 SignalR 连接（如果用户已登录且未连接）
+    /// </summary>
+    private async Task InitializeSignalRConnectionAsync()
+    {
+        try
+        {
+            var isLoggedIn = await AuthService.IsLoggedInAsync();
+            if (!isLoggedIn) return;
+            
+            // 如果已经连接，不需要重复初始化
+            if (ChatService.IsConnected) return;
+            
+            var baseUrl = Navigation.BaseUri.TrimEnd('/');
+            var hubUrl = $"{baseUrl}/chathub";
+            
+            Logger.LogInformation("首页初始化 SignalR 连接: {HubUrl}", hubUrl);
+            await ChatService.InitializeAsync(hubUrl);
+            Logger.LogInformation("首页 SignalR 连接状态: {State}", ChatService.State);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "首页初始化 SignalR 连接失败");
+            // 连接失败不影响页面功能，用户进入聊天室时会再次尝试
+        }
     }
 
+    /// <summary>
+    /// 通过 REST API 刷新统计数据（通用设计，不依赖 SignalR）
+    /// </summary>
     private async Task RefreshStatsAsync()
     {
         try
         {
-            var rooms = await ChatService.GetRoomsAsync();
-            RoomCount = rooms.Count;
-            UserCount = rooms.Sum(r => r.MemberCount);
+            // 使用 HTTP API 获取统计数据，不依赖 SignalR 连接
+            var stats = await HttpClient.GetFromJsonAsync<RoomStatsDto>("api/stats/rooms");
+            if (stats != null)
+            {
+                RoomCount = stats.RoomCount;
+                UserCount = stats.UserCount;
+                Logger.LogInformation("统计数据刷新成功: {RoomCount} 房间, {UserCount} 用户", 
+                    RoomCount, UserCount);
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"刷新统计数据失败: {ex.Message}");
-            RoomCount = 0;
-            UserCount = 0;
+            Logger.LogError(ex, "刷新统计数据失败");
+            // 失败时保持默认值或上次的数据，不显示错误
         }
+    }
+
+    /// <summary>
+    /// 房间统计数据传输对象
+    /// </summary>
+    private class RoomStatsDto
+    {
+        public int RoomCount { get; set; }
+        public int UserCount { get; set; }
     }
 
     private async Task EnterLobbyAsync()
     {
+        // 检查登录状态
+        var isLoggedIn = await AuthService.IsLoggedInAsync();
+        if (!isLoggedIn)
+        {
+            await ShowAuthDialogAsync();
+            return;
+        }
+
         try
         {
             var rooms = await ChatService.GetRoomsAsync();
@@ -114,25 +217,52 @@
         }
     }
 
-    private void ShowCreateRoomModal()
+    private async Task ShowCreateRoomDialog()
     {
-        _showCreateRoomModal = true;
+        // 检查登录状态
+        var isLoggedIn = await AuthService.IsLoggedInAsync();
+        if (!isLoggedIn)
+        {
+            await ShowAuthDialogAsync();
+            return;
+        }
+
+        var result = await DialogService.ShowAsync<CreateRoomDialog>("创建房间");
+        if (!result.Cancelled && result.Data is string roomId)
+        {
+            await RefreshStatsAsync();
+            NavigateToChat(roomId);
+        }
     }
 
-    private void ShowJoinRoomModal()
+    private async Task ShowJoinRoomDialog()
     {
-        _showJoinRoomModal = true;
+        // 检查登录状态
+        var isLoggedIn = await AuthService.IsLoggedInAsync();
+        if (!isLoggedIn)
+        {
+            await ShowAuthDialogAsync();
+            return;
+        }
+
+        var result = await DialogService.ShowAsync<JoinRoomDialog>("加入房间");
+        if (!result.Cancelled && result.Data is string roomId)
+        {
+            NavigateToChat(roomId);
+        }
     }
 
-    private async Task ShowAuthModalAsync()
+    private async Task ShowAuthDialogAsync()
     {
         if (ChatService.IsLoggedIn)
         {
-            await ChatService.LogoutAsync();
+            // 退出登录
+            ChatService.ClearCurrentUser();
+            await AuthService.LogoutAsync();
         }
         else
         {
-            _showAuthModal = true;
+            await DialogService.ShowAsync<AuthDialog>("用户认证");
         }
     }
 
@@ -140,52 +270,36 @@
     {
         Navigation.NavigateTo($"/chat?room={roomId}");
     }
-
-    private async Task OnAuthStateChangedAsync(bool isOpen)
-    {
-        _showAuthModal = isOpen;
-        await Task.CompletedTask;
-    }
-
-    private async Task OnRoomCreatedAsync(string roomId)
-    {
-        _showCreateRoomModal = false;
-        await RefreshStatsAsync();
-        NavigateToChat(roomId);
-    }
-
-    private async Task OnRoomJoinedAsync(string roomId)
-    {
-        _showJoinRoomModal = false;
-        NavigateToChat(roomId);
-    }
 }
 
 <style>
-    /* 首页样式 - 宝可梦风格配色 */
+    /* 首页样式 - 上中下布局，中间分左右 */
     .index-page {
-        min-height: 100vh;
+        height: 100vh;
+        width: 100vw;
         display: flex;
         flex-direction: column;
         background: var(--bg-primary);
         color: var(--text-primary);
+        overflow: hidden;
     }
 
+    /* 顶部导航栏 */
     .index-header {
+        flex-shrink: 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1rem 2rem;
+        padding: 0.75rem 1.5rem;
         background: var(--bg-secondary);
         border-bottom: 1px solid var(--border-color);
-        box-shadow: var(--shadow-sm);
     }
 
     .header-brand {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        font-size: 1.5rem;
+        gap: 0.5rem;
+        font-size: 1.25rem;
         font-weight: 600;
         background: linear-gradient(135deg, var(--primary), var(--primary-dark));
         -webkit-background-clip: text;
@@ -196,37 +310,104 @@
     .header-actions {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 0.75rem;
     }
 
-    .user-greeting {
-        color: var(--text-secondary);
-        font-weight: 500;
+    /* 用户下拉菜单 */
+    .user-dropdown {
+        position: relative;
     }
 
-    .btn-auth {
-        padding: 0.5rem 1.25rem;
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-        color: white;
-        border: none;
+    .btn-user {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        background: var(--bg-tertiary);
+        border: 2px solid var(--color-border-color);
         border-radius: var(--radius-md);
         font-weight: 500;
+        font-size: 0.875rem;
         cursor: pointer;
         transition: all 0.2s;
     }
 
+    .btn-user:hover {
+        border-color: var(--primary);
+        background: rgba(108, 92, 231, 0.08);
+    }
+
+    .user-avatar {
+        font-size: 1rem;
+    }
+
+    .user-name {
+        color: var(--text-primary);
+    }
+
+    .dropdown-arrow {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        transition: transform 0.2s;
+    }
+
+    .dropdown-menu {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        background: var(--bg-secondary);
+        border: 1px solid var(--color-border-color);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        min-width: 150px;
+        z-index: var(--z-dropdown);
+        overflow: hidden;
+    }
+
+    .dropdown-item {
+        display: block;
+        width: 100%;
+        padding: 0.6rem 1rem;
+        background: none;
+        border: none;
+        text-align: left;
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+
+    .dropdown-item:hover {
+        background: var(--color-bg-tertiary);
+        color: var(--color-status-error);
+    }
+
+    .btn-auth {
+        padding: 0.4rem 1.2rem;
+        background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        color: white;
+        border: none;
+        border-radius: var(--radius-md);
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+    }
+
     .btn-auth:hover {
         transform: translateY(-2px);
-        box-shadow: var(--shadow-md);
+        box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
     }
 
     .btn-github {
-        padding: 0.5rem 1.25rem;
+        padding: 0.4rem 1rem;
         background: var(--bg-tertiary);
         color: var(--text-primary);
         text-decoration: none;
         border-radius: var(--radius-md);
         font-weight: 500;
+        font-size: 0.875rem;
         transition: all 0.2s;
     }
 
@@ -235,23 +416,48 @@
         color: white;
     }
 
+    /* 主要内容区域 - 左右布局 */
     .index-main {
         flex: 1;
-        max-width: 1200px;
-        width: 100%;
-        margin: 0 auto;
-        padding: 2rem;
+        display: flex;
+        gap: 1.5rem;
+        padding: 1.5rem;
+        overflow: hidden;
     }
 
+    /* 左侧区域 */
+    .index-left {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        min-width: 0;
+        overflow-y: auto;
+    }
+
+    /* 右侧区域 */
+    .index-right {
+        width: 320px;
+        flex-shrink: 0;
+        overflow-y: auto;
+        min-width: 0;
+    }
+
+    /* 底部 */
     .index-footer {
+        flex-shrink: 0;
         text-align: center;
-        padding: 1.5rem;
-        border-top: 1px solid var(--border-color);
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
         color: var(--text-muted);
+        border-top: 1px solid var(--border-color);
     }
 
     .footer-links {
-        margin-top: 0.5rem;
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        font-size: 0.75rem;
     }
 
     .footer-links a {
@@ -264,25 +470,39 @@
     }
 
     .separator {
-        margin: 0 0.75rem;
         color: var(--border-color);
     }
 
-    @@media (max-width: 768px) {
-        .index-header {
-            padding: 1rem;
+    /* 响应式布局 */
+    @@media (max-width: 900px) {
+        .index-main {
             flex-direction: column;
-            gap: 1rem;
+            padding: 1rem;
         }
 
-        .header-actions {
+        .index-right {
             width: 100%;
-            justify-content: center;
+            max-height: 300px;
+        }
+    }
+
+    @@media (max-width: 600px) {
+        .index-header {
+            padding: 0.5rem 1rem;
+        }
+
+        .header-brand {
+            font-size: 1.1rem;
+        }
+
+        .header-brand svg {
+            width: 24px;
+            height: 24px;
         }
 
         .index-main {
-            padding: 1rem;
+            padding: 0.75rem;
+            gap: 0.75rem;
         }
     }
 </style>
-

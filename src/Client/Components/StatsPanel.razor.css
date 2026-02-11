@@ -1,6 +1,11 @@
+/* ========================================
+   StatsPanel 组件样式
+   使用全局 CSS 变量
+======================================== */
+
 .stats-panel {
     display: flex;
-    gap: 1.5rem;
+    gap: var(--spacing-lg);
     justify-content: center;
     flex-wrap: wrap;
 }
@@ -8,20 +13,20 @@
 .stat-card {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    background: var(--bg-secondary, #fff);
-    padding: 1.25rem 1.5rem;
-    border-radius: var(--radius-lg, 20px);
-    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.1));
+    gap: var(--spacing-md);
+    background: var(--color-bg-secondary);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
     min-width: 160px;
     position: relative;
     cursor: pointer;
-    transition: all var(--transition-normal, 0.25s ease);
+    transition: all var(--transition-normal);
 }
 
 .stat-card:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12));
+    box-shadow: var(--shadow-lg);
 }
 
 .stat-icon {
@@ -32,7 +37,7 @@
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(77, 171, 247, 0.1));
-    border-radius: var(--radius-md, 12px);
+    border-radius: var(--radius-md);
 }
 
 .stat-info {
@@ -42,34 +47,34 @@
 }
 
 .stat-value {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--primary, #6c5ce7);
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-primary);
     line-height: 1.2;
 }
 
 .stat-label {
-    font-size: 0.85rem;
-    color: var(--text-muted, #868e96);
-    margin-top: 0.25rem;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-xs);
 }
 
 /* 刷新按钮 */
 .refresh-btn {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
+    top: var(--spacing-xs);
+    right: var(--spacing-xs);
     width: 28px;
     height: 28px;
     border: none;
-    background: var(--bg-tertiary, #e9ecef);
+    background: var(--color-bg-tertiary);
     border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted, #868e96);
-    transition: all var(--transition-fast, 0.15s ease);
+    color: var(--color-text-muted);
+    transition: all var(--transition-fast);
     opacity: 0;
 }
 
@@ -78,8 +83,8 @@
 }
 
 .refresh-btn:hover {
-    background: var(--primary, #6c5ce7);
-    color: white;
+    background: var(--color-primary);
+    color: var(--color-text-inverse);
 }
 
 .refresh-btn svg {
@@ -102,28 +107,28 @@
 /* 响应式 */
 @media (max-width: 768px) {
     .stats-panel {
-        gap: 1rem;
+        gap: var(--spacing-md);
     }
-
+    
     .stat-card {
-        padding: 1rem 1.25rem;
+        padding: var(--spacing-md);
         min-width: 140px;
     }
-
+    
     .stat-icon {
-        font-size: 1.5rem;
+        font-size: var(--font-size-xl);
         width: 40px;
         height: 40px;
     }
-
+    
     .stat-value {
-        font-size: 1.5rem;
+        font-size: var(--font-size-xl);
     }
-
+    
     .refresh-btn {
         opacity: 1;
-        top: 0.25rem;
-        right: 0.25rem;
+        top: var(--spacing-xs);
+        right: var(--spacing-xs);
         width: 24px;
         height: 24px;
     }

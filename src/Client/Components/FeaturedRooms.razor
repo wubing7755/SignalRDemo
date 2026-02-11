@@ -1,6 +1,7 @@
 @using SignalRDemo.Client.Services
 @using SignalRDemo.Shared.Models
 @inject ChatService ChatService
+@inject AuthService AuthService
 @inject NavigationManager Navigation
 
 <div class="featured-rooms">
@@ -72,7 +73,10 @@
         _isLoading = true;
         try
         {
-            _rooms = await ChatService.GetRoomsAsync();
+            // 使用 HTTP API 获取房间列表，不依赖 SignalR 连接
+            var httpClient = new HttpClient { BaseAddress = new Uri(Navigation.BaseUri) };
+            var rooms = await httpClient.GetFromJsonAsync<List<ChatRoom>>("api/stats/rooms/list");
+            _rooms = rooms ?? new List<ChatRoom>();
         }
         catch (Exception ex)
         {
@@ -87,6 +91,14 @@
 
     private async Task JoinRoom(ChatRoom room)
     {
+        // 检查登录状态
+        var isLoggedIn = await AuthService.IsLoggedInAsync();
+        if (!isLoggedIn)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
         try
         {
             var success = await ChatService.JoinRoomAsync(room.Id);

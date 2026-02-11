@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.SignalR.Protocol;
+using Microsoft.JSInterop;
 using SignalRDemo.Shared.Models;
 using System.ComponentModel;
 
@@ -32,6 +33,7 @@ public enum ConnectionState
 public class ChatService : IAsyncDisposable, INotifyPropertyChanged
 {
     private HubConnection? _hubConnection;
+    private string? _hubUrl;
     private string _currentUserName = string.Empty;
     private string _currentUserId = string.Empty;
     private User? _currentUser;
@@ -40,6 +42,7 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     private readonly DebounceService _debounceService = new();
     private readonly ThrottleService _throttleService = new();
     private readonly ILogger<ChatService> _logger;
+    private readonly IJSRuntime _jsRuntime;
     
     // 节流相关事件
     public event Action<bool>? ThrottledChanged;
@@ -47,9 +50,25 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     /// <summary>
     /// 构造函数
     /// </summary>
-    public ChatService(ILogger<ChatService> logger)
+    public ChatService(ILogger<ChatService> logger, IJSRuntime jsRuntime)
     {
         _logger = logger;
+        _jsRuntime = jsRuntime;
+    }
+
+    /// <summary>
+    /// 获取存储的 JWT Token
+    /// </summary>
+    private async Task<string?> GetAccessTokenAsync()
+    {
+        try
+        {
+            return await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "AccessToken");
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     #region 事件
@@ -66,8 +85,6 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     public event Action<string>? Reconnected;
 
     // 认证事件
-    public event Action<LoginResponse>? LoginResult;
-    public event Action<LoginResponse>? RegisterResult;
     public event Action<User?>? AuthStateChanged;
     public event Action<dynamic>? DisplayNameResult;
 
@@ -78,6 +95,7 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     public event Action<IReadOnlyList<ChatRoom>>? RoomsUpdated;
     public event Action<IReadOnlyList<ChatRoom>>? MyRoomsUpdated;
     public event Action<ChatRoom?>? CurrentRoomChanged;
+    public event Action<IReadOnlyList<string>>? RoomUserListUpdated;
 
     #endregion
 
@@ -201,6 +219,9 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     /// </summary>
     public async Task InitializeAsync(string hubUrl)
     {
+        // 保存 hubUrl 以便后续重新初始化
+        _hubUrl = hubUrl;
+
         if (_hubConnection != null && 
             (_hubConnection.State != HubConnectionState.Disconnected))
         {
@@ -211,16 +232,26 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
 
         try
         {
-            _hubConnection = new HubConnectionBuilder()
-                .WithUrl(hubUrl)
+            // 获取 JWT Token（如果有的话）
+            var accessToken = await GetAccessTokenAsync();
+            
+            var hubConnectionBuilder = new HubConnectionBuilder()
+                .WithUrl(hubUrl, options =>
+                {
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        options.AccessTokenProvider = () => Task.FromResult(accessToken);
+                    }
+                })
                 .WithAutomaticReconnect(new[] { 
                     TimeSpan.Zero,
                     TimeSpan.FromSeconds(2),
                     TimeSpan.FromSeconds(10),
                     TimeSpan.FromSeconds(30)
                 })
-                .AddMessagePackProtocol()
-                .Build();
+                .AddMessagePackProtocol();
+            
+            _hubConnection = hubConnectionBuilder.Build();
 
             SetupEventHandlers();
 
@@ -247,6 +278,9 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
             await _hubConnection.StartAsync();
             State = ConnectionState.Connected;
 
+            // 连接成功后，主动获取在线用户列表
+            await GetOnlineUsersAsync();
+            
             await GetRecentMessagesAsync();
         }
         catch (Exception ex)
@@ -265,106 +299,62 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
         await InitializeAsync(hubUrl);
     }
 
+    /// <summary>
+    /// 重新初始化 SignalR 连接（用于登录后传递 JWT Token）
+    /// </summary>
+    public async Task ReinitializeConnectionAsync()
+    {
+        var hubUrl = _hubUrl;
+        if (string.IsNullOrEmpty(hubUrl))
+        {
+            return;
+        }
+
+        // 如果已连接，先断开
+        if (_hubConnection != null)
+        {
+            try
+            {
+                await _hubConnection.StopAsync();
+                await _hubConnection.DisposeAsync();
+            }
+            catch
+            {
+                // 忽略断开错误
+            }
+            _hubConnection = null;
+        }
+
+        // 重新初始化连接
+        await InitializeAsync(hubUrl);
+    }
+
     #endregion
 
     #region 用户认证
 
     /// <summary>
-    /// 用户注册
+    /// 设置当前用户（登录成功后由 UI 层调用）
     /// </summary>
-    public async Task RegisterAsync(string userName, string password, string? displayName)
+    public void SetCurrentUser(User user)
     {
-        if (!IsConnected) return;
-
-        var request = new RegisterRequest
-        {
-            UserName = userName,
-            Password = password,
-            DisplayName = displayName
-        };
-
-        try
-        {
-            await _hubConnection!.SendAsync("Register", request);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to register user");
-            RegisterResult?.Invoke(new LoginResponse
-            {
-                Success = false,
-                Message = "注册失败，请稍后重试"
-            });
-        }
+        CurrentUser = user;
+        CurrentUserId = user.Id;
+        CurrentUserName = user.UserName;
     }
 
     /// <summary>
-    /// 用户登录
+    /// 清除当前用户（退出登录时调用）
     /// </summary>
-    public async Task<bool> LoginAsync(string userName, string password)
+    public void ClearCurrentUser()
     {
-        if (!IsConnected) return false;
-
-        var request = new LoginRequest
-        {
-            UserName = userName,
-            Password = password
-        };
-
-        try
-        {
-            var response = await _hubConnection!.InvokeAsync<LoginResponse>("Login", request);
-            if (response?.Success == true && response.User != null)
-            {
-                CurrentUser = response.User;
-                CurrentUserId = response.User.Id;
-                CurrentUserName = response.User.UserName;
-                return true;
-            }
-            else
-            {
-                LoginResult?.Invoke(response ?? new LoginResponse
-                {
-                    Success = false,
-                    Message = "登录失败"
-                });
-                return false;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to login");
-            LoginResult?.Invoke(new LoginResponse
-            {
-                Success = false,
-                Message = "登录失败，请稍后重试"
-            });
-            return false;
-        }
+        CurrentUser = null;
+        CurrentUserId = string.Empty;
+        CurrentUserName = string.Empty;
     }
 
     /// <summary>
-    /// 登出
-    /// </summary>
-    public async Task LogoutAsync()
-    {
-        if (!IsConnected || !IsLoggedIn) return;
-
-        try
-        {
-            await _hubConnection!.SendAsync("Logout");
-            CurrentUser = null;
-            CurrentUserId = string.Empty;
-            CurrentUserName = string.Empty;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to logout");
-        }
-    }
-
-    /// <summary>
-    /// 设置显示昵称
+    /// 设置显示昵称（仅 SignalR 通信用）
     /// </summary>
     public async Task SetDisplayNameAsync(string displayName)
     {
@@ -446,6 +436,64 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get my rooms");
+            return new List<ChatRoom>();
+        }
+    }
+
+    /// <summary>
+    /// 通过房间名称加入房间
+    /// </summary>
+    public async Task<bool> JoinRoomByNameAsync(string roomName, string? password = null)
+    {
+        if (!IsConnected || !IsLoggedIn) return false;
+
+        try
+        {
+            var response = await _hubConnection!.InvokeAsync<JoinRoomResponse>("JoinRoomByName", roomName, password);
+            if (response?.Success == true)
+            {
+                CurrentRoomId = response.Room?.Id;
+                CurrentRoom = response.Room;
+                CurrentRoomChanged?.Invoke(response.Room);
+                return true;
+            }
+            else
+            {
+                JoinRoomResult?.Invoke(response ?? new JoinRoomResponse
+                {
+                    Success = false,
+                    Message = "加入房间失败"
+                });
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to join room by name");
+            JoinRoomResult?.Invoke(new JoinRoomResponse
+            {
+                Success = false,
+                Message = "加入房间失败，请稍后重试"
+            });
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 根据房间名称搜索房间
+    /// </summary>
+    public async Task<List<ChatRoom>> SearchRoomsByNameAsync(string roomName)
+    {
+        if (!IsConnected) return new List<ChatRoom>();
+
+        try
+        {
+            return await _hubConnection!.InvokeAsync<List<ChatRoom>>("SearchRoomsByName", roomName) 
+                   ?? new List<ChatRoom>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to search rooms by name");
             return new List<ChatRoom>();
         }
     }
@@ -658,6 +706,23 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// 获取在线用户列表
+    /// </summary>
+    public async Task GetOnlineUsersAsync()
+    {
+        if (!IsConnected) return;
+
+        try
+        {
+            await _hubConnection!.SendAsync("GetOnlineUsers");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get online users");
+        }
+    }
+
+    /// <summary>
     /// 获取最近的消息历史
     /// </summary>
     public async Task GetRecentMessagesAsync(int count = 50)
@@ -720,24 +785,6 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
             DefaultUserNameReceived?.Invoke(userName);
         });
 
-        // 注册结果
-        _hubConnection.On<LoginResponse>("RegisterResult", response =>
-        {
-            RegisterResult?.Invoke(response);
-            if (response.Success && response.User != null)
-            {
-                CurrentUser = response.User;
-                CurrentUserId = response.User.Id;
-                CurrentUserName = response.User.UserName;
-            }
-        });
-
-        // 登录结果
-        _hubConnection.On<LoginResponse>("LoginResult", response =>
-        {
-            LoginResult?.Invoke(response);
-        });
-
         // 显示昵称设置结果
         _hubConnection.On<dynamic>("DisplayNameResult", result =>
         {
@@ -766,6 +813,12 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
         _hubConnection.On<IReadOnlyList<ChatRoom>>("MyRoomsUpdated", rooms =>
         {
             MyRoomsUpdated?.Invoke(rooms);
+        });
+
+        // 房间用户列表更新
+        _hubConnection.On<IReadOnlyList<string>>("RoomUserListUpdated", userNames =>
+        {
+            RoomUserListUpdated?.Invoke(userNames);
         });
 
         // 错误处理
@@ -802,8 +855,6 @@ public class ChatService : IAsyncDisposable, INotifyPropertyChanged
             _hubConnection.Remove("UserLeft");
             _hubConnection.Remove("UpdateUserList");
             _hubConnection.Remove("SetDefaultUserName");
-            _hubConnection.Remove("RegisterResult");
-            _hubConnection.Remove("LoginResult");
             _hubConnection.Remove("DisplayNameResult");
             _hubConnection.Remove("RoomCreated");
             _hubConnection.Remove("JoinRoomResult");

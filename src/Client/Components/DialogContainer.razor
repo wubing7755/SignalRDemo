@@ -1,0 +1,83 @@
+@using SignalRDemo.Client.Infrastructure
+@implements IDisposable
+@inject DialogService DialogService
+
+@foreach (var dialog in _dialogs)
+{
+    <div class="dialog-overlay @(dialog.Id == _latestDialogId ? "show" : "")" @onclick="() => OnOverlayClick(dialog)">
+        <div class="dialog-content" @onclick:stopPropagation>
+            <div class="dialog-header">
+                <h3>@dialog.Title</h3>
+                <button class="dialog-close-btn" @onclick="() => OnCloseClick(dialog)">X</button>
+            </div>
+            
+            <div class="dialog-body">
+                <DynamicComponent 
+                    Type="@dialog.ComponentType" 
+                    Parameters="@GetParameters(dialog)" 
+                />
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DialogReference> _dialogs = new();
+    private string _latestDialogId = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        DialogService.OnDialogStateChanged += OnDialogStateChanged;
+        RefreshDialogs();
+    }
+
+    private void OnDialogStateChanged()
+    {
+        RefreshDialogs();
+    }
+
+    private void RefreshDialogs()
+    {
+        _dialogs = DialogService.Dialogs.ToList();
+        if (_dialogs.Count > 0)
+        {
+            _latestDialogId = _dialogs.Last().Id;
+        }
+        else
+        {
+            _latestDialogId = string.Empty;
+        }
+        StateHasChanged();
+    }
+
+    private Dictionary<string, object?> GetParameters(DialogReference dialog)
+    {
+        var parameters = new Dictionary<string, object?>();
+        
+        // 注入 DialogService 以便对话框可以调用 Close/Cancel
+        parameters["DialogReference"] = dialog;
+        
+        // 添加自定义参数
+        foreach (var param in dialog.Parameters)
+        {
+            parameters[param.Key] = param.Value;
+        }
+        
+        return parameters;
+    }
+
+    private void OnCloseClick(DialogReference dialog)
+    {
+        DialogService.Cancel(dialog);
+    }
+
+    private void OnOverlayClick(DialogReference dialog)
+    {
+        DialogService.Cancel(dialog);
+    }
+
+    public void Dispose()
+    {
+        DialogService.OnDialogStateChanged -= OnDialogStateChanged;
+    }
+}

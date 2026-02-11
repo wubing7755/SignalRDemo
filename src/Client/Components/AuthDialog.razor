@@ -1,0 +1,178 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Client.Abstractions
+@using SignalRDemo.Shared.Models
+@inherits DialogBase
+@inject AuthService AuthService
+@inject ChatService ChatService
+@inject ILogger<AuthDialog> Logger
+
+<div class="auth-tabs">
+    <button class="tab @(_isLogin ? "active" : "")" @onclick="() => _isLogin = true">Login</button>
+    <button class="tab @(!_isLogin ? "active" : "")" @onclick="() => _isLogin = false">Register</button>
+</div>
+
+@if (_isLogin)
+{
+    <div class="auth-form">
+        <div class="form-group">
+            <label>Username</label>
+            <input @bind="_loginUserName" placeholder="Enter username" maxlength="20" />
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" @bind="_loginPassword" placeholder="Enter password" maxlength="50" />
+        </div>
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="error-message">@_errorMessage</div>
+        }
+        <button class="btn-primary" @onclick="HandleLogin" disabled="@_isLoading">
+            @if (_isLoading)
+            {
+                <span class="spinner"></span>
+                <span>Logging in...</span>
+            }
+            else
+            {
+                <span>Login</span>
+            }
+        </button>
+    </div>
+}
+else
+{
+    <div class="auth-form">
+        <div class="form-group">
+            <label>Username *</label>
+            <input @bind="_registerUserName" placeholder="3-20 characters" maxlength="20" />
+        </div>
+        <div class="form-group">
+            <label>Password *</label>
+            <input type="password" @bind="_registerPassword" placeholder="At least 6 characters" maxlength="50" />
+        </div>
+        <div class="form-group">
+            <label>Display Name</label>
+            <input @bind="_registerDisplayName" placeholder="Optional" maxlength="30" />
+        </div>
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="error-message">@_errorMessage</div>
+        }
+        <button class="btn-primary" @onclick="HandleRegister" disabled="@_isLoading">
+            @if (_isLoading)
+            {
+                <span class="spinner"></span>
+                <span>Registering...</span>
+            }
+            else
+            {
+                <span>Register</span>
+            }
+        </button>
+    </div>
+}
+
+@code {
+    private bool _isLogin = true;
+    private bool _isLoading;
+    private string _loginUserName = string.Empty;
+    private string _loginPassword = string.Empty;
+    private string _registerUserName = string.Empty;
+    private string _registerPassword = string.Empty;
+    private string _registerDisplayName = string.Empty;
+    private string _errorMessage = string.Empty;
+
+    private async Task HandleLogin()
+    {
+        if (_isLoading) return;
+
+        if (string.IsNullOrWhiteSpace(_loginUserName) || string.IsNullOrWhiteSpace(_loginPassword))
+        {
+            _errorMessage = "Username and password are required";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            var response = await AuthService.LoginAsync(_loginUserName, _loginPassword);
+            if (response.Success && response.User != null)
+            {
+                // 设置当前用户状态
+                ChatService.SetCurrentUser(response.User);
+                
+                // 重新初始化 SignalR 连接以传递 JWT Token
+                await ChatService.ReinitializeConnectionAsync();
+                
+                Logger.LogInformation("User {UserName} logged in successfully", _loginUserName);
+                Close(true); // 认证成功，返回 true
+            }
+            else
+            {
+                _errorMessage = response.Message ?? "Invalid username or password";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Login failed");
+            _errorMessage = "Login failed, please try again";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        if (_isLoading) return;
+
+        if (string.IsNullOrWhiteSpace(_registerUserName) || string.IsNullOrWhiteSpace(_registerPassword))
+        {
+            _errorMessage = "Username and password are required";
+            return;
+        }
+
+        if (_registerUserName.Length < 3)
+        {
+            _errorMessage = "Username must be at least 3 characters";
+            return;
+        }
+
+        if (_registerPassword.Length < 6)
+        {
+            _errorMessage = "Password must be at least 6 characters";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            var response = await AuthService.RegisterAsync(_registerUserName, _registerPassword,
+                string.IsNullOrWhiteSpace(_registerDisplayName) ? null : _registerDisplayName);
+            
+            if (response.Success)
+            {
+                _isLogin = true;
+                _errorMessage = "Registration successful, please login";
+            }
+            else
+            {
+                _errorMessage = response.Message ?? "Registration failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Registration failed");
+            _errorMessage = "Registration failed, please try again";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

@@ -1,0 +1,178 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Client.Abstractions
+@using SignalRDemo.Shared.Models
+@inherits DialogBase
+@inject ChatService ChatService
+@inject ILogger<JoinRoomDialog> Logger
+
+<div class="form-group">
+    <label>Enter Room Name</label>
+    <input @bind="_roomNameInput" @bind:event="oninput" @onkeyup="HandleRoomNameInput"
+           placeholder="Enter room name to search..." maxlength="50" />
+</div>
+
+@if (_searchResults.Count > 0)
+{
+    <div class="form-group">
+        <label>Search Results</label>
+        <div class="room-list">
+            @foreach (var room in _searchResults)
+            {
+                <div class="room-option @(SelectedRoom?.Id == room.Id ? "selected" : "")"
+                     @onclick="() => SelectRoom(room)">
+                    <div class="room-info">
+                        <span class="room-name">@room.Name</span>
+                        <span class="room-meta">
+                            @(room.IsPublic ? "Public" : "Private") - @room.MemberCount members
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (SelectedRoom != null && !SelectedRoom.IsPublic)
+{
+    <div class="form-group">
+        <label>Room Password *</label>
+        <input type="password" @bind="_roomPassword" placeholder="Enter room password" maxlength="50" />
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="error-message">@_errorMessage</div>
+}
+
+<div class="dialog-footer">
+    <button class="btn-cancel" @onclick="Cancel">Cancel</button>
+    <button class="btn-join" @onclick="HandleJoinRoom" disabled="@_isJoining">
+        @if (_isJoining)
+        {
+            <span class="spinner"></span>
+            <span>Joining...</span>
+        }
+        else
+        {
+            <span>Join Room</span>
+        }
+    </button>
+</div>
+
+@code {
+    private string _roomNameInput = string.Empty;
+    private string _roomPassword = string.Empty;
+    private string _errorMessage = string.Empty;
+    private bool _isJoining;
+    private List<ChatRoom> _searchResults = new();
+    private ChatRoom? SelectedRoom { get; set; }
+    private System.Timers.Timer? _debounceTimer;
+
+    private void HandleRoomNameInput(KeyboardEventArgs e)
+    {
+        // 重置选中状态
+        SelectedRoom = null;
+        _errorMessage = string.Empty;
+
+        // 清除之前的定时器
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+
+        if (string.IsNullOrWhiteSpace(_roomNameInput))
+        {
+            _searchResults.Clear();
+            return;
+        }
+
+        // 创建新的定时器，延迟 300ms 后搜索
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer.Stop();
+            _debounceTimer.Dispose();
+            await InvokeAsync(async () => await SearchRoomsAsync());
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task SearchRoomsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_roomNameInput))
+        {
+            _searchResults.Clear();
+            return;
+        }
+
+        try
+        {
+            _searchResults = await ChatService.SearchRoomsByNameAsync(_roomNameInput);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to search rooms");
+            _searchResults.Clear();
+        }
+    }
+
+    private void SelectRoom(ChatRoom room)
+    {
+        SelectedRoom = room;
+        _roomNameInput = room.Name;
+        _roomPassword = string.Empty;
+        _errorMessage = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task HandleJoinRoom()
+    {
+        if (_isJoining) return;
+
+        if (string.IsNullOrWhiteSpace(_roomNameInput))
+        {
+            _errorMessage = "Please enter a room name";
+            return;
+        }
+
+        // 如果选中了房间，检查密码
+        if (SelectedRoom != null && !SelectedRoom.IsPublic && string.IsNullOrWhiteSpace(_roomPassword))
+        {
+            _errorMessage = "Please enter the room password";
+            return;
+        }
+
+        _isJoining = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            // 使用房间名称加入房间
+            var success = await ChatService.JoinRoomByNameAsync(_roomNameInput.Trim(), _roomPassword);
+            if (success)
+            {
+                Logger.LogInformation("Joined room successfully: {RoomName}", _roomNameInput);
+                Close(_roomNameInput);
+            }
+            else
+            {
+                _errorMessage = "Failed to join room. Please check the room name and password.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to join room");
+            _errorMessage = "Failed to join room, please try again";
+        }
+        finally
+        {
+            _isJoining = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+    }
+}

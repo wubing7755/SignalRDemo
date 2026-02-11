@@ -4,6 +4,7 @@
 @using SignalRDemo.Client.Components
 @implements IAsyncDisposable
 @inject ChatService ChatService
+@inject AuthService AuthService
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
 @inject ILogger<ChatRoom> Logger
@@ -165,7 +166,7 @@
     private string _newUserName = string.Empty;
     private ElementReference _messagesContainer;
     private bool _shouldScrollToBottom;
-    private bool _showUserNameInput = true;
+    private bool _showUserNameInput;
     private bool _showUserMenu;
     private string _currentRoomId = "lobby";
 
@@ -188,8 +189,52 @@
         ChatService.DefaultUserNameReceived += OnDefaultUserNameReceived;
         ChatService.ConnectionClosed += OnConnectionClosed;
         ChatService.Reconnected += OnReconnected;
+        ChatService.RoomCreated += OnRoomCreated;
+        ChatService.RoomUserListUpdated += OnRoomUserListUpdated;
 
         await InitializeChatService();
+        
+        // 加载用户房间列表
+        await LoadMyRoomsAsync();
+    }
+    
+    /// <summary>
+    /// 加载用户的房间列表
+    /// </summary>
+    private async Task LoadMyRoomsAsync()
+    {
+        try
+        {
+            if (ChatService.IsConnected && ChatService.IsLoggedIn)
+            {
+                var rooms = await ChatService.GetMyRoomsAsync();
+                _rooms = rooms;
+                Logger.LogInformation("加载了 {Count} 个用户房间", _rooms.Count);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "加载用户房间列表失败");
+        }
+    }
+    
+    /// <summary>
+    /// 房间创建成功处理
+    /// </summary>
+    private void OnRoomCreated(JoinRoomResponse response)
+    {
+        if (response.Success && response.Room != null)
+        {
+            // 检查是否已存在该房间
+            var existingRoom = _rooms.FirstOrDefault(r => r.Id == response.Room.Id);
+            if (existingRoom == null)
+            {
+                _rooms.Add(response.Room);
+                Logger.LogInformation("新房间已添加到列表: {RoomName}", response.Room.Name);
+                InvokeAsync(StateHasChanged);
+            }
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -205,6 +250,25 @@
     {
         try
         {
+            // 检查是否已登录，未登录则跳转到首页
+            var isLoggedIn = await AuthService.IsLoggedInAsync();
+            if (!isLoggedIn)
+            {
+                Logger.LogWarning("用户未登录，跳转回首页");
+                NavigationManager.NavigateTo("/");
+                return;
+            }
+
+            // 已登录用户不允许修改昵称
+            _showUserNameInput = false;
+
+            // 关键修复：如果已经在首页建立了连接，直接复用
+            if (ChatService.IsConnected)
+            {
+                Logger.LogInformation("复用已有的 SignalR 连接");
+                return;
+            }
+
             var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
             var hubUrl = $"{baseUrl}/chathub";
             Logger.LogInformation("正在连接到SignalR Hub: {HubUrl}", hubUrl);
@@ -225,10 +289,13 @@
 
     private void OnMessageReceived(ChatMessage message)
     {
-        // 只显示当前房间的消息
-        _messages.Add(message);
-        _shouldScrollToBottom = true;
-        InvokeAsync(StateHasChanged);
+        // 只显示当前房间的消息（全局消息或当前房间的消息）
+        if (string.IsNullOrEmpty(message.RoomId) || message.RoomId == _currentRoomId)
+        {
+            _messages.Add(message);
+            _shouldScrollToBottom = true;
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private void OnMessageHistoryReceived(IReadOnlyList<ChatMessage> messages)
@@ -265,7 +332,19 @@
 
     private void OnUserListUpdated(IReadOnlyList<string> userNames)
     {
+        // 全局用户列表更新，如果是大厅则显示
+        if (_currentRoomId == "lobby")
+        {
+            _connectedUsers = userNames.ToList();
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnRoomUserListUpdated(IReadOnlyList<string> userNames)
+    {
+        // 房间用户列表更新
         _connectedUsers = userNames.ToList();
+        Logger.LogInformation("房间用户列表更新: {Count} 用户", _connectedUsers.Count);
         InvokeAsync(StateHasChanged);
     }
 
@@ -321,16 +400,62 @@
 
     private async Task HandleRoomSelect(string roomId)
     {
+        // 如果切换到相同房间，不做任何操作
+        if (_currentRoomId == roomId) return;
+
+        // 离开当前房间
+        if (!string.IsNullOrEmpty(_currentRoomId) && _currentRoomId != "lobby")
+        {
+            await ChatService.LeaveRoomAsync();
+        }
+
         _currentRoomId = roomId;
-        // TODO: 加载房间消息历史
-        await Task.CompletedTask;
+        _messages.Clear();
+
+        // 加入新房间并加载消息历史
+        if (roomId != "lobby")
+        {
+            var success = await ChatService.JoinRoomAsync(roomId);
+            if (success)
+            {
+                var messages = await ChatService.GetRoomMessagesAsync(roomId);
+                _messages.AddRange(messages);
+            }
+            else
+            {
+                // 加入失败，回到大厅
+                _currentRoomId = "lobby";
+            }
+        }
+        else
+        {
+            // 大厅：加载全局消息历史
+            await ChatService.GetRecentMessagesAsync();
+        }
+
+        _shouldScrollToBottom = true;
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task HandleRoomCreate(SignalRDemo.Shared.Models.ChatRoom room)
     {
-        _rooms.Add(room);
-        // TODO: 调用服务器创建房间
-        await Task.CompletedTask;
+        try
+        {
+            // 调用服务器创建房间
+            await ChatService.CreateRoomAsync(
+                room.Name, 
+                room.Description, 
+                room.IsPublic, 
+                null); // 密码暂时不传，如果需要可以扩展
+            
+            Logger.LogInformation("创建房间请求已发送: {RoomName}", room.Name);
+            // 注意：房间创建成功后，服务端会广播 RoomCreated 事件
+            // OnRoomCreated 方法会自动将新房间添加到列表
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "创建房间失败");
+        }
     }
 
     private void ShowUserNameInput()
@@ -359,6 +484,7 @@
     private void ToggleUserMenu()
     {
         _showUserMenu = !_showUserMenu;
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task ScrollToBottomAsync()
@@ -444,6 +570,8 @@
         ChatService.DefaultUserNameReceived -= OnDefaultUserNameReceived;
         ChatService.ConnectionClosed -= OnConnectionClosed;
         ChatService.Reconnected -= OnReconnected;
+        ChatService.RoomCreated -= OnRoomCreated;
+        ChatService.RoomUserListUpdated -= OnRoomUserListUpdated;
 
         await ChatService.DisposeAsync();
     }

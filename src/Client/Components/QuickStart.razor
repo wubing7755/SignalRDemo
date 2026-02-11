@@ -1,6 +1,7 @@
 @using SignalRDemo.Client.Services
 @using SignalRDemo.Shared.Models
 @inject ChatService ChatService
+@inject AuthService AuthService
 @inject NavigationManager NavigationManager
 
 <div class="quick-start">
@@ -137,6 +138,15 @@
 
     private async Task JoinRoom(ChatRoom room)
     {
+        // 检查登录状态
+        var isLoggedIn = await AuthService.IsLoggedInAsync();
+        if (!isLoggedIn)
+        {
+            // 通知父组件显示登录弹窗
+            await OnEnterLobby.InvokeAsync();
+            return;
+        }
+
         try
         {
             var success = await ChatService.JoinRoomAsync(room.Id);

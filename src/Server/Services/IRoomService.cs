@@ -51,4 +51,19 @@ public interface IRoomService
     /// 检查用户是否在房间中
     /// </summary>
     Task<bool> IsUserInRoomAsync(string userId, string roomId);
+
+    /// <summary>
+    /// 根据房间名称查找房间（支持模糊搜索）
+    /// </summary>
+    Task<List<ChatRoom>> FindRoomsByNameAsync(string roomName);
+
+    /// <summary>
+    /// 根据房间名称获取房间（精确匹配，不区分大小写）
+    /// </summary>
+    Task<ChatRoom?> GetRoomByNameAsync(string roomName);
+
+    /// <summary>
+    /// 获取房间中的所有用户ID
+    /// </summary>
+    Task<List<string>> GetRoomUserIdsAsync(string roomId);
 }

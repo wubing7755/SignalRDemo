@@ -1,39 +1,43 @@
-/* UserList 组件样式 - 宝可梦明亮风格 */
+/* ========================================
+   UserList 组件样式
+   使用全局 CSS 变量
+======================================== */
+
 .user-list-container {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-secondary, #fff);
+    background: var(--color-bg-secondary);
 }
 
 .user-list-header {
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--border-color, #dee2e6);
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-color);
 }
 
 .header-title {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    color: var(--text-primary, #212529);
-    font-weight: 600;
-    font-size: 0.95rem;
+    gap: var(--spacing-sm);
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
 }
 
 .user-count {
-    background: linear-gradient(135deg, var(--primary, #6c5ce7), var(--accent-blue, #4dabf7));
-    color: var(--text-inverse, #fff);
-    padding: 0.15rem 0.5rem;
-    border-radius: var(--radius-full, 9999px);
-    font-size: 0.75rem;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-accent-blue));
+    color: var(--color-text-inverse);
+    padding: 0.15rem var(--spacing-xs);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
     margin-left: auto;
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
 }
 
 .user-list {
     flex: 1;
     overflow-y: auto;
-    padding: 0.5rem;
+    padding: var(--spacing-sm);
 }
 
 .empty-users {
@@ -41,34 +45,34 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2rem;
-    color: var(--text-muted, #868e96);
+    padding: var(--spacing-lg);
+    color: var(--color-text-muted);
 }
 
 .empty-icon {
     font-size: 2rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--spacing-xs);
     opacity: 0.5;
 }
 
 .empty-users p {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: var(--font-size-sm);
 }
 
 .user-item {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    border-radius: var(--radius-md, 12px);
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all var(--transition-fast, 0.15s ease);
-    margin-bottom: 0.25rem;
+    transition: all var(--transition-fast);
+    margin-bottom: var(--spacing-xs);
 }
 
 .user-item:hover {
-    background: var(--bg-tertiary, #e9ecef);
+    background: var(--color-bg-tertiary);
 }
 
 .user-item.current-user {
@@ -86,11 +90,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-inverse, #fff);
-    font-weight: 600;
-    font-size: 1rem;
+    color: var(--color-text-inverse);
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-base);
     flex-shrink: 0;
-    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
+    box-shadow: var(--shadow-sm);
 }
 
 .user-info {
@@ -98,31 +102,31 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: 2px;
 }
 
 .user-name {
-    color: var(--text-primary, #212529);
-    font-size: 0.9rem;
-    font-weight: 500;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .you-badge {
-    color: var(--primary, #6c5ce7);
-    font-size: 0.75rem;
-    margin-left: 0.25rem;
-    font-weight: 500;
+    color: var(--color-primary);
+    font-size: var(--font-size-xs);
+    margin-left: var(--spacing-xs);
+    font-weight: var(--font-weight-medium);
 }
 
 .user-status {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    font-size: 0.75rem;
-    color: var(--text-muted, #868e96);
+    gap: 4px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
 }
 
 .status-dot {
@@ -133,36 +137,36 @@
 }
 
 .status-dot.online {
-    background: var(--accent-green, #51cf66);
+    background: var(--color-accent-green);
     box-shadow: 0 0 8px rgba(81, 207, 102, 0.5);
 }
 
 .status-dot.away {
-    background: var(--accent-yellow, #ffd43b);
+    background: var(--color-accent-yellow);
     box-shadow: 0 0 8px rgba(255, 212, 59, 0.5);
 }
 
 .status-dot.busy {
-    background: var(--accent-red, #ff6b6b);
+    background: var(--color-accent-red);
     box-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
 }
 
 .status-dot.offline {
-    background: var(--text-muted, #868e96);
+    background: var(--color-text-muted);
 }
 
 .private-chat-btn {
     width: 32px;
     height: 32px;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--radius-sm);
     border: none;
     background: transparent;
-    color: var(--text-muted, #868e96);
+    color: var(--color-text-muted);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--transition-fast, 0.15s ease);
+    transition: all var(--transition-fast);
     opacity: 0;
 }
 
@@ -172,7 +176,7 @@
 
 .private-chat-btn:hover {
     background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(77, 171, 247, 0.1));
-    color: var(--primary, #6c5ce7);
+    color: var(--color-primary);
 }
 
 /* 滚动条样式 */
@@ -185,12 +189,12 @@
 }
 
 .user-list::-webkit-scrollbar-thumb {
-    background: var(--border-color, #dee2e6);
+    background: var(--color-border-color);
     border-radius: 3px;
 }
 
 .user-list::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted, #868e96);
+    background: var(--color-text-muted);
 }
 
 /* 响应式 */
@@ -198,21 +202,21 @@
     .user-list-container {
         height: auto;
     }
-
+    
     .user-item {
-        padding: 0.5rem;
+        padding: var(--spacing-sm);
     }
-
+    
     .user-avatar {
         width: 36px;
         height: 36px;
-        font-size: 0.9rem;
+        font-size: var(--font-size-sm);
     }
-
+    
     .user-name {
-        font-size: 0.85rem;
+        font-size: var(--font-size-sm);
     }
-
+    
     .private-chat-btn {
         opacity: 1;
     }

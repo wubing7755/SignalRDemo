@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Microsoft.JSInterop;
+using SignalRDemo.Client.Services.Abstractions;
 using SignalRDemo.Shared.Models;
 
 namespace SignalRDemo.Client.Services;
@@ -11,19 +12,28 @@ public class AuthService
 {
     private readonly HttpClient _httpClient;
     private readonly IJSRuntime _jsRuntime;
+    private readonly IUserStateService _userStateService;
     private readonly ILogger<AuthService> _logger;
     private const string AuthEndpoint = "/api/auth";
 
-    public AuthService(HttpClient httpClient, IJSRuntime jsRuntime, ILogger<AuthService> logger)
+    public AuthService(
+        HttpClient httpClient, 
+        IJSRuntime jsRuntime, 
+        IUserStateService userStateService,
+        ILogger<AuthService> logger)
     {
         _httpClient = httpClient;
         _jsRuntime = jsRuntime;
+        _userStateService = userStateService;
         _logger = logger;
     }
 
     /// <summary>
     /// 用户登录
     /// </summary>
+    /// <param name="userName">用户名</param>
+    /// <param name="password">密码</param>
+    /// <returns>登录结果响应</returns>
     public async Task<LoginResponse> LoginAsync(string userName, string password)
     {
         try
@@ -58,8 +68,12 @@ public class AuthService
     }
 
     /// <summary>
-    /// 用户注册
+    /// 用户注册（注册成功后需重新登录）
     /// </summary>
+    /// <param name="userName">用户名</param>
+    /// <param name="password">密码</param>
+    /// <param name="displayName">显示名称（可选）</param>
+    /// <returns>注册结果响应</returns>
     public async Task<LoginResponse> RegisterAsync(string userName, string password, string? displayName)
     {
         try
@@ -142,7 +156,34 @@ public class AuthService
         finally
         {
             await ClearTokensAsync();
+            await _userStateService.ClearCurrentUserAsync();
         }
+    }
+
+    /// <summary>
+    /// 登录并设置用户状态（新架构推荐方法）
+    /// </summary>
+    public async Task<LoginResponse> LoginAndSetUserAsync(string userName, string password)
+    {
+        var response = await LoginAsync(userName, password);
+        if (response.Success && response.User != null)
+        {
+            await _userStateService.SetCurrentUserAsync(response.User);
+        }
+        return response;
+    }
+
+    /// <summary>
+    /// 注册并设置用户状态（新架构推荐方法）
+    /// </summary>
+    public async Task<LoginResponse> RegisterAndSetUserAsync(string userName, string password, string? displayName)
+    {
+        var response = await RegisterAsync(userName, password, displayName);
+        if (response.Success && response.User != null)
+        {
+            await _userStateService.SetCurrentUserAsync(response.User);
+        }
+        return response;
     }
 
     /// <summary>
@@ -187,7 +228,7 @@ public class AuthService
     /// <summary>
     /// 存储 Token
     /// </summary>
-    private async Task StoreTokenAsync(string? token)
+    public async Task StoreTokenAsync(string? token)
     {
         if (!string.IsNullOrEmpty(token))
         {
@@ -198,7 +239,7 @@ public class AuthService
     /// <summary>
     /// 存储刷新 Token
     /// </summary>
-    private async Task StoreRefreshTokenAsync(string? refreshToken)
+    public async Task StoreRefreshTokenAsync(string? refreshToken)
     {
         if (!string.IsNullOrEmpty(refreshToken))
         {

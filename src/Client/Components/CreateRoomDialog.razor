@@ -1,0 +1,160 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Client.Abstractions
+@using SignalRDemo.Shared.Models
+@inherits DialogBase
+@inject ChatService ChatService
+@inject ILogger<CreateRoomDialog> Logger
+
+@implements IDisposable
+
+<div class="form-group">
+    <label>Room Name *</label>
+    <input @bind="_roomName" placeholder="Enter room name (2-50 chars)" maxlength="50" />
+</div>
+
+<div class="form-group">
+    <label>Room Description</label>
+    <input @bind="_roomDesc" placeholder="Enter room description (optional)" maxlength="200" />
+</div>
+
+<div class="form-group">
+    <label>Room Type</label>
+    <div class="room-type-options">
+        <label class="radio-option @(_isPublic ? "selected" : "")">
+            <input type="radio" name="roomType" checked="@_isPublic" @onchange="() => _isPublic = true" />
+            <span class="radio-label">
+                <span class="radio-icon">Public</span>
+                <span class="radio-text">
+                    <strong>Public Room</strong>
+                    <small>Anyone can join</small>
+                </span>
+            </span>
+        </label>
+        <label class="radio-option @(!_isPublic ? "selected" : "")">
+            <input type="radio" name="roomType" checked="@(!_isPublic)" @onchange="() => _isPublic = false" />
+            <span class="radio-label">
+                <span class="radio-icon">Private</span>
+                <span class="radio-text">
+                    <strong>Private Room</strong>
+                    <small>Password required</small>
+                </span>
+            </span>
+        </label>
+    </div>
+</div>
+
+@if (!_isPublic)
+{
+    <div class="form-group">
+        <label>Room Password *</label>
+        <input type="password" @bind="_roomPassword" placeholder="At least 6 characters" maxlength="50" />
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="error-message">@_errorMessage</div>
+}
+
+<div class="dialog-footer">
+    <button class="btn-cancel" @onclick="Cancel">Cancel</button>
+    <button class="btn-create" @onclick="HandleCreateRoom" disabled="@_isCreating">
+        @if (_isCreating)
+        {
+            <span class="spinner"></span>
+            <span>Creating...</span>
+        }
+        else
+        {
+            <span>Create Room</span>
+        }
+    </button>
+</div>
+
+@code {
+    private string _roomName = string.Empty;
+    private string _roomDesc = string.Empty;
+    private bool _isPublic = true;
+    private string _roomPassword = string.Empty;
+    private string _errorMessage = string.Empty;
+    private bool _isCreating;
+
+    protected override void OnInitialized()
+    {
+        ChatService.RoomCreated += OnRoomCreatedHandler;
+    }
+
+    private void OnRoomCreatedHandler(JoinRoomResponse response)
+    {
+        if (response.Success && response.Room != null)
+        {
+            InvokeAsync(async () =>
+            {
+                // 房间创建成功后，自动加入该房间
+                // 注意：服务端 CreateRoom 已经调用了 _roomService.CreateRoomAsync，
+                // 这会将创建者自动加入房间，所以我们只需要更新客户端状态
+                Logger.LogInformation("房间创建成功，准备加入房间: {RoomId}", response.Room.Id);
+                
+                // 成功：关闭弹窗并返回房间ID
+                Close(response.Room.Id);
+            });
+        }
+        else
+        {
+            _errorMessage = response.Message ?? "创建房间失败";
+            _isCreating = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        ChatService.RoomCreated -= OnRoomCreatedHandler;
+    }
+
+    private async Task HandleCreateRoom()
+    {
+        if (_isCreating) return;
+
+        if (string.IsNullOrWhiteSpace(_roomName) || _roomName.Length < 2)
+        {
+            _errorMessage = "Room name must be at least 2 characters";
+            return;
+        }
+
+        if (!_isPublic && string.IsNullOrWhiteSpace(_roomPassword))
+        {
+            _errorMessage = "Private room requires a password";
+            return;
+        }
+
+        if (!_isPublic && _roomPassword.Length < 6)
+        {
+            _errorMessage = "Password must be at least 6 characters";
+            return;
+        }
+
+        _isCreating = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            await ChatService.CreateRoomAsync(
+                _roomName.Trim(),
+                string.IsNullOrWhiteSpace(_roomDesc) ? null : _roomDesc.Trim(),
+                _isPublic,
+                _isPublic ? null : _roomPassword);
+
+            Logger.LogInformation("Create room request sent: {RoomName}", _roomName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to create room");
+            _errorMessage = "Failed to create room, please try again";
+        }
+        finally
+        {
+            _isCreating = false;
+        }
+    }
+}
