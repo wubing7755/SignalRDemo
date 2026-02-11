@@ -1,33 +1,33 @@
-/* UserList 组件样式 */
+/* UserList 组件样式 - 宝可梦明亮风格 */
 .user-list-container {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #1e1e2e;
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-secondary, #fff);
 }
 
 .user-list-header {
     padding: 1rem 1.25rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--border-color, #dee2e6);
 }
 
 .header-title {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary, #212529);
     font-weight: 600;
     font-size: 0.95rem;
 }
 
 .user-count {
-    background: rgba(102, 126, 234, 0.2);
-    color: #667eea;
+    background: linear-gradient(135deg, var(--primary, #6c5ce7), var(--accent-blue, #4dabf7));
+    color: var(--text-inverse, #fff);
     padding: 0.15rem 0.5rem;
-    border-radius: 10px;
-    font-size: 0.8rem;
+    border-radius: var(--radius-full, 9999px);
+    font-size: 0.75rem;
     margin-left: auto;
+    font-weight: 500;
 }
 
 .user-list {
@@ -42,12 +42,13 @@
     align-items: center;
     justify-content: center;
     padding: 2rem;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-muted, #868e96);
 }
 
 .empty-icon {
     font-size: 2rem;
     margin-bottom: 0.5rem;
+    opacity: 0.5;
 }
 
 .empty-users p {
@@ -60,22 +61,22 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem;
-    border-radius: 10px;
+    border-radius: var(--radius-md, 12px);
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all var(--transition-fast, 0.15s ease);
     margin-bottom: 0.25rem;
 }
 
 .user-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-tertiary, #e9ecef);
 }
 
 .user-item.current-user {
-    background: rgba(102, 126, 234, 0.1);
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(77, 171, 247, 0.1));
 }
 
 .user-item.current-user:hover {
-    background: rgba(102, 126, 234, 0.15);
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(77, 171, 247, 0.15));
 }
 
 .user-avatar {
@@ -85,10 +86,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: var(--text-inverse, #fff);
     font-weight: 600;
     font-size: 1rem;
     flex-shrink: 0;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
 }
 
 .user-info {
@@ -100,7 +102,7 @@
 }
 
 .user-name {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary, #212529);
     font-size: 0.9rem;
     font-weight: 500;
     white-space: nowrap;
@@ -109,9 +111,10 @@
 }
 
 .you-badge {
-    color: #667eea;
+    color: var(--primary, #6c5ce7);
     font-size: 0.75rem;
     margin-left: 0.25rem;
+    font-weight: 500;
 }
 
 .user-status {
@@ -119,40 +122,47 @@
     align-items: center;
     gap: 0.35rem;
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted, #868e96);
 }
 
 .status-dot {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
+    flex-shrink: 0;
 }
 
 .status-dot.online {
-    background: #43e97b;
-    box-shadow: 0 0 8px rgba(67, 233, 123, 0.5);
+    background: var(--accent-green, #51cf66);
+    box-shadow: 0 0 8px rgba(81, 207, 102, 0.5);
 }
 
 .status-dot.away {
-    background: #fee140;
+    background: var(--accent-yellow, #ffd43b);
+    box-shadow: 0 0 8px rgba(255, 212, 59, 0.5);
 }
 
 .status-dot.busy {
-    background: #f5576c;
+    background: var(--accent-red, #ff6b6b);
+    box-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
+}
+
+.status-dot.offline {
+    background: var(--text-muted, #868e96);
 }
 
 .private-chat-btn {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm, 6px);
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted, #868e96);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: all var(--transition-fast, 0.15s ease);
     opacity: 0;
 }
 
@@ -161,8 +171,8 @@
 }
 
 .private-chat-btn:hover {
-    background: rgba(102, 126, 234, 0.2);
-    color: #667eea;
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(77, 171, 247, 0.1));
+    color: var(--primary, #6c5ce7);
 }
 
 /* 滚动条样式 */
@@ -175,10 +185,35 @@
 }
 
 .user-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--border-color, #dee2e6);
     border-radius: 3px;
 }
 
 .user-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--text-muted, #868e96);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .user-list-container {
+        height: auto;
+    }
+
+    .user-item {
+        padding: 0.5rem;
+    }
+
+    .user-avatar {
+        width: 36px;
+        height: 36px;
+        font-size: 0.9rem;
+    }
+
+    .user-name {
+        font-size: 0.85rem;
+    }
+
+    .private-chat-btn {
+        opacity: 1;
+    }
 }

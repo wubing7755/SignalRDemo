@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.2.11415.280 d18.0
+VisualStudioVersion = 18.2.11415.280
 MinimumVisualStudioVersion = 16.0.0.0
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalRDemo.Server", "src\Server\SignalRDemo.Server.csproj", "{6DCE74AF-CBB1-44F6-95ED-98443C57AA0B}"
 EndProject
@@ -13,6 +13,14 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{E258C473-7A68-4A85-8D15-A1D92B24EECD}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "doc", "doc", "{132AF67F-CEE8-441C-991F-0F7F20DF4A35}"
+	ProjectSection(SolutionItems) = preProject
+		doc\ChatRoom.md = doc\ChatRoom.md
+		doc\error.md = doc\error.md
+		doc\SignalR_Tutorial.md = doc\SignalR_Tutorial.md
+		doc\Suggestion.md = doc\Suggestion.md
+		doc\UI-Design.md = doc\UI-Design.md
+		doc\unimplemented.md = doc\unimplemented.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -8,40 +8,16 @@ namespace SignalRDemo.Server.Services;
 /// </summary>
 public interface IUserConnectionManager
 {
-    /// <summary>
-    /// 添加用户连接
-    /// </summary>
     void AddConnection(string connectionId, string userName);
-    
-    /// <summary>
-    /// 移除用户连接
-    /// </summary>
     void RemoveConnection(string connectionId);
-    
-    /// <summary>
-    /// 根据连接ID获取用户名
-    /// </summary>
     string? GetUserName(string connectionId);
-    
-    /// <summary>
-    /// 获取所有在线用户列表
-    /// </summary>
     IReadOnlyList<UserConnection> GetAllConnections();
-    
-    /// <summary>
-    /// 获取在线用户数量
-    /// </summary>
     int GetConnectionCount();
-    
-    /// <summary>
-    /// 检查用户是否在线
-    /// </summary>
     bool IsUserOnline(string userName);
-    
-    /// <summary>
-    /// 更新用户名
-    /// </summary>
     void UpdateUserName(string connectionId, string newUserName);
+    void SetUserId(string connectionId, string userId);
+    string? GetUserId(string connectionId);
+    void ClearUserId(string connectionId);
 }
 
 /// <summary>
@@ -49,19 +25,16 @@ public interface IUserConnectionManager
 /// </summary>
 public class UserConnectionManager : IUserConnectionManager
 {
-    // 使用 ConcurrentDictionary 保证线程安全
     private readonly ConcurrentDictionary<string, UserConnection> _connections = new();
 
     public void AddConnection(string connectionId, string userName)
     {
-        var connection = new UserConnection
+        _connections[connectionId] = new UserConnection
         {
             ConnectionId = connectionId,
             UserName = userName,
             ConnectedAt = DateTime.UtcNow
         };
-        
-        _connections[connectionId] = connection;
     }
 
     public void RemoveConnection(string connectionId)
@@ -95,6 +68,27 @@ public class UserConnectionManager : IUserConnectionManager
         if (_connections.TryGetValue(connectionId, out var connection))
         {
             connection.UserName = newUserName;
+        }
+    }
+
+    public void SetUserId(string connectionId, string userId)
+    {
+        if (_connections.TryGetValue(connectionId, out var connection))
+        {
+            connection.UserId = userId;
+        }
+    }
+
+    public string? GetUserId(string connectionId)
+    {
+        return _connections.TryGetValue(connectionId, out var connection) ? connection.UserId : null;
+    }
+
+    public void ClearUserId(string connectionId)
+    {
+        if (_connections.TryGetValue(connectionId, out var connection))
+        {
+            connection.UserId = null;
         }
     }
 }

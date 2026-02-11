@@ -1,0 +1,171 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Shared.Models
+@inject ChatService ChatService
+@inject ILogger<JoinRoomModal> Logger
+
+<div class="modal-overlay @(IsOpen ? "show" : "")" @onclick="Close">
+    <div class="modal-content" @onclick:stopPropagation>
+        <div class="modal-header">
+            <h3>Join Room</h3>
+            <button class="close-btn" @onclick="Close">X</button>
+        </div>
+
+        <div class="modal-body">
+            @if (_rooms.Count > 0)
+            {
+                <div class="form-group">
+                    <label>Select Room</label>
+                    <div class="room-list">
+                        @foreach (var room in _rooms)
+                        {
+                            <div class="room-option @(SelectedRoomId == room.Id ? "selected" : "")"
+                                 @onclick="() => SelectRoom(room)">
+                                <div class="room-info">
+                                    <span class="room-name">@room.Name</span>
+                                    <span class="room-meta">
+                                        @(room.IsPublic ? "Public" : "Private") - @room.MemberCount members
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="form-group">
+                <label>Or Enter Room ID</label>
+                <input @bind="_roomIdInput" placeholder="Enter room ID" maxlength="100" />
+            </div>
+
+            @if (_selectedRoom != null && !_selectedRoom.IsPublic)
+            {
+                <div class="form-group">
+                    <label>Room Password *</label>
+                    <input type="password" @bind="_roomPassword" placeholder="Enter room password" maxlength="50" />
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="error-message">@_errorMessage</div>
+            }
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-cancel" @onclick="Close">Cancel</button>
+            <button class="btn-join" @click="HandleJoinRoom" disabled="@_isJoining">
+                @if (_isJoining)
+                {
+                    <span class="spinner"></span>
+                    <span>Joining...</span>
+                }
+                else
+                {
+                    <span>Join Room</span>
+                }
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnRoomJoined { get; set; }
+
+    private List<ChatRoom> _rooms = new();
+    private ChatRoom? _selectedRoom;
+    private string SelectedRoomId => _selectedRoom?.Id ?? _roomIdInput;
+    private string _roomIdInput = string.Empty;
+    private string _roomPassword = string.Empty;
+    private string _errorMessage = string.Empty;
+    private bool _isJoining;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen)
+        {
+            await LoadRoomsAsync();
+        }
+    }
+
+    private async Task LoadRoomsAsync()
+    {
+        try
+        {
+            _rooms = await ChatService.GetRoomsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load room list");
+            _rooms = new List<ChatRoom>();
+        }
+    }
+
+    private void SelectRoom(ChatRoom room)
+    {
+        _selectedRoom = room;
+        _roomIdInput = string.Empty;
+        _roomPassword = string.Empty;
+    }
+
+    private async Task Close()
+    {
+        _selectedRoom = null;
+        _roomIdInput = string.Empty;
+        _roomPassword = string.Empty;
+        _errorMessage = string.Empty;
+        await OnClose.InvokeAsync(false);
+    }
+
+    private async Task HandleJoinRoom()
+    {
+        if (_isJoining) return;
+
+        var targetRoomId = SelectedRoomId;
+        if (string.IsNullOrWhiteSpace(targetRoomId))
+        {
+            _errorMessage = "Please select or enter a room";
+            return;
+        }
+
+        var targetRoom = _rooms.FirstOrDefault(r => r.Id == targetRoomId);
+        if (targetRoom != null && !targetRoom.IsPublic && string.IsNullOrWhiteSpace(_roomPassword))
+        {
+            _errorMessage = "Please enter the room password";
+            return;
+        }
+
+        _isJoining = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            var success = await ChatService.JoinRoomAsync(targetRoomId, _roomPassword);
+            if (success)
+            {
+                Logger.LogInformation("Joined room successfully: {RoomId}", targetRoomId);
+                await OnRoomJoined.InvokeAsync(targetRoomId);
+                await Close();
+            }
+            else
+            {
+                _errorMessage = "Failed to join room, please check the password";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to join room");
+            _errorMessage = "Failed to join room, please try again";
+        }
+        finally
+        {
+            _isJoining = false;
+        }
+    }
+}

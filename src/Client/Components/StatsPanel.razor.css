@@ -1,0 +1,130 @@
+.stats-panel {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--bg-secondary, #fff);
+    padding: 1.25rem 1.5rem;
+    border-radius: var(--radius-lg, 20px);
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.1));
+    min-width: 160px;
+    position: relative;
+    cursor: pointer;
+    transition: all var(--transition-normal, 0.25s ease);
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.stat-icon {
+    font-size: 2rem;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(77, 171, 247, 0.1));
+    border-radius: var(--radius-md, 12px);
+}
+
+.stat-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--primary, #6c5ce7);
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted, #868e96);
+    margin-top: 0.25rem;
+}
+
+/* 刷新按钮 */
+.refresh-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: var(--bg-tertiary, #e9ecef);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted, #868e96);
+    transition: all var(--transition-fast, 0.15s ease);
+    opacity: 0;
+}
+
+.stat-card:hover .refresh-btn {
+    opacity: 1;
+}
+
+.refresh-btn:hover {
+    background: var(--primary, #6c5ce7);
+    color: white;
+}
+
+.refresh-btn svg {
+    transition: transform 0.3s ease;
+}
+
+.refresh-btn svg.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .stats-panel {
+        gap: 1rem;
+    }
+
+    .stat-card {
+        padding: 1rem 1.25rem;
+        min-width: 140px;
+    }
+
+    .stat-icon {
+        font-size: 1.5rem;
+        width: 40px;
+        height: 40px;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+    }
+
+    .refresh-btn {
+        opacity: 1;
+        top: 0.25rem;
+        right: 0.25rem;
+        width: 24px;
+        height: 24px;
+    }
+}

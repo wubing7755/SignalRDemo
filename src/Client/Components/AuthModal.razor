@@ -1,0 +1,198 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Shared.Models
+@inject ChatService ChatService
+@inject ILogger<AuthModal> Logger
+
+<div class="modal-overlay @(IsOpen ? "show" : "")" @onclick="Close">
+    <div class="modal-content auth-modal" @onclick:stopPropagation>
+        <div class="modal-header">
+            <h3>@(_isLogin ? "User Login" : "User Registration")</h3>
+            <button class="close-btn" @onclick="Close">X</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="auth-tabs">
+                <button class="tab @(_isLogin ? "active" : "")" @onclick="() => _isLogin = true">Login</button>
+                <button class="tab @(!_isLogin ? "active" : "")" @onclick="() => _isLogin = false">Register</button>
+            </div>
+
+            @if (_isLogin)
+            {
+                <div class="auth-form">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input @bind="_loginUserName" placeholder="Enter username" maxlength="20" />
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" @bind="_loginPassword" placeholder="Enter password" maxlength="50" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="error-message">@_errorMessage</div>
+                    }
+                    <button class="btn-primary" @click="HandleLogin" disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <span class="spinner"></span>
+                            <span>Logging in...</span>
+                        }
+                        else
+                        {
+                            <span>Login</span>
+                        }
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="auth-form">
+                    <div class="form-group">
+                        <label>Username *</label>
+                        <input @bind="_registerUserName" placeholder="3-20 characters" maxlength="20" />
+                    </div>
+                    <div class="form-group">
+                        <label>Password *</label>
+                        <input type="password" @bind="_registerPassword" placeholder="At least 6 characters" maxlength="50" />
+                    </div>
+                    <div class="form-group">
+                        <label>Display Name</label>
+                        <input @bind="_registerDisplayName" placeholder="Optional" maxlength="30" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="error-message">@_errorMessage</div>
+                    }
+                    <button class="btn-primary" @click="HandleRegister" disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <span class="spinner"></span>
+                            <span>Registering...</span>
+                        }
+                        else
+                        {
+                            <span>Register</span>
+                        }
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnAuthStateChanged { get; set; }
+
+    private bool _isLogin = true;
+    private bool _isLoading;
+    private string _loginUserName = string.Empty;
+    private string _loginPassword = string.Empty;
+    private string _registerUserName = string.Empty;
+    private string _registerPassword = string.Empty;
+    private string _registerDisplayName = string.Empty;
+    private string _errorMessage = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && ChatService.IsLoggedIn)
+        {
+            _isLogin = false;
+        }
+    }
+
+    private async Task Close()
+    {
+        _errorMessage = string.Empty;
+        _loginUserName = string.Empty;
+        _loginPassword = string.Empty;
+        _registerUserName = string.Empty;
+        _registerPassword = string.Empty;
+        _registerDisplayName = string.Empty;
+        await OnAuthStateChanged.InvokeAsync(false);
+    }
+
+    private async Task HandleLogin()
+    {
+        if (_isLoading) return;
+
+        if (string.IsNullOrWhiteSpace(_loginUserName) || string.IsNullOrWhiteSpace(_loginPassword))
+        {
+            _errorMessage = "Username and password are required";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            var success = await ChatService.LoginAsync(_loginUserName, _loginPassword);
+            if (success)
+            {
+                Logger.LogInformation("User {UserName} logged in successfully", _loginUserName);
+                await Close();
+            }
+            else
+            {
+                _errorMessage = "Invalid username or password";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Login failed");
+            _errorMessage = "Login failed, please try again";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        if (_isLoading) return;
+
+        if (string.IsNullOrWhiteSpace(_registerUserName) || string.IsNullOrWhiteSpace(_registerPassword))
+        {
+            _errorMessage = "Username and password are required";
+            return;
+        }
+
+        if (_registerUserName.Length < 3)
+        {
+            _errorMessage = "Username must be at least 3 characters";
+            return;
+        }
+
+        if (_registerPassword.Length < 6)
+        {
+            _errorMessage = "Password must be at least 6 characters";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            await ChatService.RegisterAsync(_registerUserName, _registerPassword, 
+                string.IsNullOrWhiteSpace(_registerDisplayName) ? null : _registerDisplayName);
+            
+            _isLogin = true;
+            _errorMessage = "Registration successful, please login";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Registration failed");
+            _errorMessage = "Registration failed, please try again";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

@@ -1,0 +1,73 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Shared.Models
+@inject ChatService ChatService
+@implements IDisposable
+
+<div class="stats-panel">
+    <div class="stat-card" @onclick="RefreshStatsAsync">
+        <div class="stat-icon">💬</div>
+        <div class="stat-info">
+            <span class="stat-value">@RoomCount</span>
+            <span class="stat-label">在线房间</span>
+        </div>
+        <button class="refresh-btn" title="刷新">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="@(_isLoading ? "spinning" : "")">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        </button>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-info">
+            <span class="stat-value">@UserCount</span>
+            <span class="stat-label">在线人数</span>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int RoomCount { get; set; }
+
+    [Parameter]
+    public int UserCount { get; set; }
+
+    [Parameter]
+    public EventCallback OnRefresh { get; set; }
+
+    private bool _isLoading;
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        // 启动定时刷新 - 每30秒刷新一次
+        _refreshTimer = new System.Threading.Timer(
+            _ => InvokeAsync(RefreshStatsAsync),
+            null,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30)
+        );
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        if (_isLoading) return;
+
+        _isLoading = true;
+        try
+        {
+            await OnRefresh.InvokeAsync();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

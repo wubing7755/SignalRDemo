@@ -1,0 +1,103 @@
+@using SignalRDemo.Client.Services
+@using SignalRDemo.Shared.Models
+@inject ChatService ChatService
+@inject NavigationManager Navigation
+
+<div class="featured-rooms">
+    <div class="section-header">
+        <h3>🏠 推荐公共房间</h3>
+        <button class="refresh-btn" @onclick="LoadRoomsAsync" title="刷新">
+            🔄
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading">
+            <span class="spinner"></span>
+            加载中...
+        </div>
+    }
+    else if (_rooms.Count == 0)
+    {
+        <div class="empty-state">
+            <span class="empty-icon">📭</span>
+            <p>暂无公共房间</p>
+        </div>
+    }
+    else
+    {
+        <div class="rooms-grid">
+            @foreach (var room in _rooms)
+            {
+                <div class="room-card" @onclick="() => JoinRoom(room)">
+                    <div class="room-header">
+                        <span class="room-icon @(room.IsPublic ? "public" : "private")">
+                            @(room.IsPublic ? "📢" : "🔒")
+                        </span>
+                        <span class="room-name">@room.Name</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(room.Description))
+                    {
+                        <p class="room-desc">@room.Description</p>
+                    }
+                    <div class="room-footer">
+                        <span class="member-count">
+                            👥 @room.MemberCount
+                        </span>
+                        <span class="room-type">
+                            @(room.IsPublic ? "公共" : "私人")
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback<string> OnRoomJoined { get; set; }
+
+    private List<ChatRoom> _rooms = new();
+    private bool _isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoomsAsync();
+    }
+
+    private async Task LoadRoomsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _rooms = await ChatService.GetRoomsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"加载房间列表失败: {ex.Message}");
+            _rooms = new List<ChatRoom>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task JoinRoom(ChatRoom room)
+    {
+        try
+        {
+            var success = await ChatService.JoinRoomAsync(room.Id);
+            if (success)
+            {
+                await OnRoomJoined.InvokeAsync(room.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"加入房间失败: {ex.Message}");
+        }
+    }
+}

@@ -1,7 +1,71 @@
-﻿@import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
+@import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
+
+/* ========================================
+   宝可梦风格配色方案
+   Pokemon Color Scheme
+======================================== */
+:root {
+    /* 主色调 */
+    --primary: #6c5ce7;
+    --primary-light: #a29bfe;
+    --primary-dark: #5849be;
+    
+    /* 强调色 */
+    --accent-red: #ff6b6b;
+    --accent-blue: #4dabf7;
+    --accent-green: #51cf66;
+    --accent-yellow: #ffd43b;
+    --accent-orange: #ff922b;
+    --accent-pink: #f06595;
+    --accent-cyan: #22b8cf;
+    --accent-purple: #be4bdb;
+    
+    /* 背景色 - 明亮系 */
+    --bg-primary: #f8f9fa;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #e9ecef;
+    --bg-card: #ffffff;
+    --bg-overlay: rgba(0, 0, 0, 0.5);
+    
+    /* 文字颜色 */
+    --text-primary: #212529;
+    --text-secondary: #495057;
+    --text-muted: #868e96;
+    --text-inverse: #ffffff;
+    
+    /* 边框颜色 */
+    --border-color: #dee2e6;
+    --border-light: #e9ecef;
+    
+    /* 圆角 */
+    --radius-sm: 6px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+    --radius-xl: 30px;
+    --radius-full: 9999px;
+    
+    /* 阴影 */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.15);
+    
+    /* 过渡 */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.25s ease;
+    --transition-slow: 0.4s ease;
+    
+    /* 状态颜色 */
+    --success: #51cf66;
+    --warning: #ffd43b;
+    --error: #ff6b6b;
+    --info: #4dabf7;
+}
 
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
 }
 
 h1:focus {

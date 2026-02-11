@@ -31,11 +31,11 @@
             </span>
         </div>
         <div class="topbar-right">
-            <div class="user-info" @onclick="ToggleUserMenu">
-                <div class="user-avatar-small" style="background: @GetUserColor(ChatService.CurrentUser)">
-                    @GetUserInitial(ChatService.CurrentUser)
-                </div>
-                <span class="user-name-small">@ChatService.CurrentUser</span>
+    <div class="user-info" @onclick="ToggleUserMenu">
+        <div class="user-avatar-small" style="background: @GetUserColor(ChatService.CurrentUserName)">
+            @GetUserInitial(ChatService.CurrentUserName)
+        </div>
+        <span class="user-name-small">@ChatService.CurrentUserName</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M6 9l6 6 6-6"/>
                 </svg>
@@ -50,8 +50,8 @@
             <RoomList 
                 CurrentRoomId="@_currentRoomId"
                 Rooms="@_rooms"
-                OnRoomSelect="HandleRoomSelect"
-                OnRoomCreate="HandleRoomCreate" />
+                OnRoomSelect="async (roomId) => await HandleRoomSelect(roomId)"
+                OnRoomCreate="async (room) => await HandleRoomCreate(room)" />
         </aside>
 
         <!-- 中间：消息区域 -->
@@ -77,7 +77,7 @@
                 {
                     @foreach (var message in _messages)
                     {
-                        var isOwnMessage = message.User == ChatService.CurrentUser;
+                        var isOwnMessage = message.User == ChatService.CurrentUserName;
                         var isSystemMessage = message.User == "System";
 
                         @if (isSystemMessage)
@@ -160,7 +160,7 @@
 @code {
     private List<ChatMessage> _messages = new();
     private List<string> _connectedUsers = new();
-    private List<RoomList.RoomModel> _rooms = new();
+    private List<SignalRDemo.Shared.Models.ChatRoom> _rooms = new();
     private string _newMessage = string.Empty;
     private string _newUserName = string.Empty;
     private ElementReference _messagesContainer;
@@ -326,7 +326,7 @@
         await Task.CompletedTask;
     }
 
-    private async Task HandleRoomCreate(RoomList.RoomModel room)
+    private async Task HandleRoomCreate(SignalRDemo.Shared.Models.ChatRoom room)
     {
         _rooms.Add(room);
         // TODO: 调用服务器创建房间
@@ -335,7 +335,7 @@
 
     private void ShowUserNameInput()
     {
-        _newUserName = ChatService.CurrentUser;
+        _newUserName = ChatService.CurrentUserName;
         _showUserNameInput = true;
     }
 

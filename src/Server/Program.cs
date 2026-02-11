@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using SignalRDemo.Server.Hubs;
 using SignalRDemo.Server.Services;
 
@@ -13,9 +16,37 @@ public class Program
         builder.Services.AddControllersWithViews();
         builder.Services.AddRazorPages();
         
+        // JWT 配置
+        var jwtSettings = builder.Configuration.GetSection("Jwt");
+        var secretKey = jwtSettings["SecretKey"] ?? "ThisIsASecretKeyForJwtTokenGeneration123456";
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+        
+        builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = jwtSettings["Issuer"] ?? "SignalRDemo",
+                ValidAudience = jwtSettings["Audience"] ?? "SignalRDemoClients",
+                IssuerSigningKey = key
+            };
+        });
+
+        builder.Services.AddAuthorization();
+
         // 注册聊天服务
         builder.Services.AddSingleton<IChatRepository, InMemoryChatRepository>();
         builder.Services.AddSingleton<IUserConnectionManager, UserConnectionManager>();
+        builder.Services.AddSingleton<IUserService, UserService>();
+        builder.Services.AddSingleton<IRoomService, RoomService>();
         
         // SignalR 配置：添加 MessagePack 协议和优化选项
         builder.Services.AddSignalR()
@@ -53,7 +84,6 @@ public class Program
         else
         {
             app.UseExceptionHandler("/Error");
-            // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
             app.UseHsts();
         }
 
@@ -63,6 +93,10 @@ public class Program
         app.UseStaticFiles();
 
         app.UseRouting();
+
+        // 添加认证和授权中间件
+        app.UseAuthentication();
+        app.UseAuthorization();
 
         app.UseCors("AllowBlazorClient");
 
