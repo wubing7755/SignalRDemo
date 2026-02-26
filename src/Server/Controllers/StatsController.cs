@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using SignalRDemo.Server.Services;
+using SignalRDemo.Infrastructure.Services;
 
 namespace SignalRDemo.Server.Controllers;
 

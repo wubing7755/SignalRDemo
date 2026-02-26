@@ -5,7 +5,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
-using SignalRDemo.Server.Services;
+using SignalRDemo.Infrastructure.Services;
 using SignalRDemo.Shared.Models;
 
 namespace SignalRDemo.Server.Controllers;

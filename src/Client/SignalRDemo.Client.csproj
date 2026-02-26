@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Shared\SignalRDemo.Shared.csproj" />
+    <ProjectReference Include="..\SignalRDemo.Application\SignalRDemo.Application.csproj" />
   </ItemGroup>
 
 </Project>

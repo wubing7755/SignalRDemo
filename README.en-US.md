@@ -1,12 +1,12 @@
 # SignalR Real-Time Chat Room (Blazor WebAssembly)
 
-![Blazor WASM](https://img.shields.io/badge/Blazor-WebAssembly-blueviolet)
+![Blazor WASM](https://img.shields.io/badge/Blazor-Web-assembly-blueviolet)
 ![.NET](https://img.shields.io/badge/.NET-6.0%2B-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![EN](https://img.shields.io/badge/Language-English-blue)](README.en-US.md)
 [![CN](https://img.shields.io/badge/语言-中文-red)](README.md)
 
-A real-time multiplayer chat room example project based on **Blazor WebAssembly** and **ASP.NET Core SignalR**, using the standard **Blazor WASM hosting model** with Client, Server, and Shared projects to demonstrate a complete real-time bidirectional communication implementation.
+A real-time multiplayer chat room example project based on **Blazor WebAssembly** and **ASP.NET Core SignalR**, using **DDD (Domain-Driven Design)** architecture with complete CQRS implementation.
 
 ---
 
@@ -16,10 +16,12 @@ A real-time multiplayer chat room example project based on **Blazor WebAssembly*
 - 👥 Multi-user online chat
 - 🟢 Online user status display
 - ⏱️ Message timestamps
-- 🧑 Simple user identification
+- 🧑 User authentication system (registration/login)
+- 🔐 Private room password protection
 - 🔄 SignalR real-time bidirectional communication
 - 🔌 Automatic reconnection mechanism
 - 📡 Real-time connection status indicator
+- 🏥 Health check endpoint
 
 ---
 
@@ -30,6 +32,8 @@ A real-time multiplayer chat room example project based on **Blazor WebAssembly*
 | Frontend | Blazor WebAssembly (.NET 6.0.36) |
 | Backend | ASP.NET Core (.NET 6.0) |
 | Real-time Communication | SignalR |
+| Architecture | DDD + CQRS (MediatR) |
+| Authentication | JWT |
 | Shared Models | .NET 6.0 Class Library |
 
 ---
@@ -38,39 +42,71 @@ A real-time multiplayer chat room example project based on **Blazor WebAssembly*
 
 ```
 SignalRDemo/
-├── Client/                     # Blazor WebAssembly Client
+├── Client/                           # Blazor WebAssembly Client
 │   ├── Pages/
-│   │   ├── ChatRoom.razor      # Chat room main page
-│   │   └── Index.razor         # Home page
+│   │   ├── ChatRoom.razor          # Chat room main page
+│   │   └── Index.razor             # Home page
 │   ├── Services/
-│   │   └── ChatService.cs      # SignalR connection and communication service
+│   │   ├── ChatService.cs          # SignalR connection service
+│   │   ├── AuthService.cs          # Authentication service
+│   │   └── RoomService.cs         # Room service
+│   ├── Components/                  # Blazor components
 │   ├── Shared/
-│   │   ├── MainLayout.razor
-│   │   ├── NavMenu.razor
-│   │   └── SurveyPrompt.razor
-│   ├── wwwroot/
-│   ├── App.razor
-│   ├── _Imports.razor
-│   ├── Program.cs              # Client entry point
-│   └── SignalRDemo.Client.csproj
+│   └── wwwroot/
 │
-├── Server/                     # ASP.NET Core Server
+├── Server/                           # ASP.NET Core Server
 │   ├── Hubs/
-│   │   └── ChatHub.cs          # SignalR Hub
-│   ├── Pages/
-│   │   ├── Error.cshtml        # Error page
-│   │   └── Error.cshtml.cs
-│   ├── Properties/
-│   │   └── launchSettings.json # Launch configuration
-│   ├── Program.cs              # Server entry point
-│   ├── appsettings.json
-│   └── SignalRDemo.Server.csproj
+│   │   └── ChatHub.cs              # SignalR Hub
+│   ├── Controllers/
+│   │   ├── AuthController.cs       # Authentication API
+│   │   └── StatsController.cs      # Stats API
+│   ├── Services/
+│   │   └── SignalRHealthCheck.cs  # Health check
+│   └── Program.cs
 │
-└── Shared/                     # Shared Class Library
-    ├── Models/
-    │   ├── ChatMessage.cs      # Chat message model
-    │   └── UserConnection.cs   # User connection model
-    └── SignalRDemo.Shared.csproj
+├── Shared/                          # Shared Class Library
+│   └── Models/
+│       ├── ChatMessage.cs           # Chat message model
+│       ├── ChatRoom.cs             # Chat room model
+│       ├── User.cs                 # User model
+│       ├── Requests.cs             # Request DTOs
+│       ├── Responses.cs            # Response DTOs
+│       └── MessageType.cs          # Message type enum
+│
+├── SignalRDemo.Application/        # Application Layer (CQRS)
+│   ├── Commands/                    # Commands
+│   │   ├── Messages/
+│   │   ├── Rooms/
+│   │   └── Users/
+│   ├── Handlers/                    # Command handlers
+│   ├── DTOs/                       # Data transfer objects
+│   └── Results/                    # Result wrapper
+│
+├── SignalRDemo.Domain/             # Domain Layer
+│   ├── Aggregates/                  # Aggregate roots
+│   │   ├── ChatRoom.cs
+│   │   └── User.cs
+│   ├── Entities/                    # Entities
+│   │   └── ChatMessage.cs
+│   ├── ValueObjects/                # Value objects
+│   │   ├── EntityId.cs
+│   │   ├── RoomName.cs
+│   │   ├── UserName.cs
+│   │   └── ...
+│   ├── Events/                     # Domain events
+│   ├── Exceptions/                 # Domain exceptions
+│   └── Repositories/               # Repository interfaces
+│
+└── SignalRDemo.Infrastructure/    # Infrastructure Layer
+    ├── Services/                   # Service implementations
+    │   ├── ChatRepository.cs
+    │   ├── RoomService.cs
+    │   ├── UserService.cs
+    │   └── UserConnectionManager.cs
+    └── Repositories/                # Repository implementations
+        ├── InMemoryMessageRepository.cs
+        ├── InMemoryRoomRepository.cs
+        └── InMemoryUserRepository.cs
 ```
 
 ---
@@ -100,7 +136,7 @@ dotnet restore
 3. Start the server
 
 ```bash
-dotnet run --project Server/SignalRDemo.Server.csproj
+dotnet run --project src/Server/SignalRDemo.Server.csproj
 ```
 
 4. Browser access
@@ -110,117 +146,44 @@ dotnet run --project Server/SignalRDemo.Server.csproj
 
 ---
 
-## 🛠️ Implementation Steps
+## 🏗️ Architecture
 
-The project is implemented step by step, suitable for learning the complete integration process of SignalR with Blazor WASM.
+This project uses **DDD (Domain-Driven Design)** architecture combined with **CQRS** pattern.
 
-### 1️⃣ Project Initialization
+### Domain Layer
 
-- Verify Blazor WebAssembly hosting model
-- Confirm Client / Server / Shared project structure
-- Ensure project builds and runs successfully
+Contains core business logic:
+- **Aggregate Roots**: ChatRoom, User
+- **Entities**: ChatMessage
+- **Value Objects**: EntityId, RoomName, UserName, etc.
+- **Repository Interfaces**: Define data access contracts
 
-### 2️⃣ Add SignalR Packages
+### Application Layer
 
-**Server**
-- `Microsoft.AspNetCore.SignalR` (v1.1.0)
-- `Microsoft.AspNetCore.Components.WebAssembly.Server` (v6.0.36)
+Uses MediatR for CQRS:
+- **Commands**: SendMessageCommand, CreateRoomCommand, JoinRoomCommand, LoginCommand, etc.
+- **Handlers**: Process commands and return results
 
-**Client**
-- `Microsoft.AspNetCore.SignalR.Client` (v6.0.36)
-- `Microsoft.AspNetCore.Components.WebAssembly` (v6.0.36)
+### Infrastructure Layer
 
-### 3️⃣ Define Shared Models
+Implements interfaces defined in Domain layer:
+- **Services**: UserService, RoomService, ChatRepository, UserConnectionManager
+- **Repositories**: InMemoryUserRepository, InMemoryRoomRepository, InMemoryMessageRepository
 
-| Model | Description |
-|-------|-------------|
-| `ChatMessage` | Chat message containing user, message content, timestamp |
-| `UserConnection` | User connection info containing user ID, username, connection time |
+### Server Layer
 
-### 4️⃣ Implement SignalR Hub
-
-**ChatHub.cs** core functionality:
-
-```csharp
-public class ChatHub : Hub
-{
-    // Message broadcast
-    public async Task SendMessage(ChatMessage chatMessage)
-    {
-        await Clients.All.SendAsync("ReceiveMessage", chatMessage);
-    }
-
-    // User connection notification
-    public override async Task OnConnectedAsync()
-    {
-        await Clients.All.SendAsync("UserConnected", Context.ConnectionId);
-        await base.OnConnectedAsync();
-    }
-
-    // User disconnection notification
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        await Clients.All.SendAsync("UserDisconnected", Context.ConnectionId);
-        await base.OnDisconnectedAsync(exception);
-    }
-}
-```
-
-### 5️⃣ Server Configuration
-
-**Program.cs** key configuration:
-
-- Register SignalR service: `services.AddSignalR()`
-- Map Hub route: `app.MapHub<ChatHub>("/chathub")`
-- Configure CORS to support WASM client access
-- Enable Blazor file serving: `app.UseBlazorFrameworkFiles()`
-
-### 6️⃣ Client SignalR Connection
-
-**ChatService.cs** core functionality:
-
-- Create `HubConnection` instance
-- Configure Hub URL connection
-- Register message handlers (ReceiveMessage, UserConnected, UserDisconnected)
-- Implement automatic reconnection mechanism
-- Provide `SendMessageAsync` for sending messages
-
-### 7️⃣ Chat Room UI
-
-- Chat main interface layout
-- Message list display (with timestamp formatting)
-- Input box and send button
-- Online user list (based on ConnectionId)
-- Connection status indicator
-
-### 8️⃣ Message Sending/Receiving Mechanism
-
-```
-Client sends → Hub.SendMessage → Server broadcast → All clients receive
-```
-
-### 9️⃣ User Status Management
-
-- User identification: Auto-generated `User_XXXX` format username
-- Custom username setting supported
-- Real-time online/offline status display
-- Connection status indicator (Connected/Disconnected/Connecting)
-
-### 🔟 Optimization & Testing
-
-- Message timestamp formatting (UTC conversion)
-- Exception handling and error messages
-- Automatic reconnection strategy
-- UI and interaction experience optimization
+- **SignalR Hub**: Handles real-time communication
+- **Controllers**: Provides REST API (authentication, stats)
+- **Health Check**: Monitors service status
 
 ---
 
 ## 📖 Use Cases
 
-- 🎓 Learning SignalR real-time communication
-- ⚡ Blazor WebAssembly practical example
+- 🎓 Learning DDD architecture design
+- ⚡ SignalR real-time communication practice
 - 💬 Instant chat/notification system prototype
-- 🤝 Real-time collaboration application foundation
+- 🤝 CQRS pattern practice
 
 ---
 

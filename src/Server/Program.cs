@@ -3,6 +3,11 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using SignalRDemo.Server.Hubs;
 using SignalRDemo.Server.Services;
+using SignalRDemo.Infrastructure.Services;
+using SignalRDemo.Infrastructure.Repositories;
+using SignalRDemo.Domain.Repositories;
+using SignalRDemo.Application.Handlers;
+using MediatR;
 
 public class Program
 {
@@ -56,11 +61,21 @@ public class Program
 
         builder.Services.AddAuthorization();
 
-        // 注册聊天服务 - 使用 JSON 文件持久化
-        builder.Services.AddSingleton<IChatRepository, JsonChatRepository>();
+        // 注册聊天服务 - 使用 Infrastructure 层服务
+        builder.Services.AddSingleton<IChatRepository, ChatRepository>();
         builder.Services.AddSingleton<IUserConnectionManager, UserConnectionManager>();
-        builder.Services.AddSingleton<IUserService, JsonUserService>();
-        builder.Services.AddSingleton<IRoomService, JsonRoomService>();
+        builder.Services.AddSingleton<IUserService, UserService>();
+        builder.Services.AddSingleton<IRoomService, RoomService>();
+
+        // ========== DDD 新架构服务注册 ==========
+        
+        // MediatR
+        builder.Services.AddMediatR(typeof(RegisterUserHandler).Assembly);
+        
+        // 领域仓储 - 使用内存实现
+        builder.Services.AddSingleton<IUserRepository, InMemoryUserRepository>();
+        builder.Services.AddSingleton<IRoomRepository, InMemoryRoomRepository>();
+        builder.Services.AddSingleton<IMessageRepository, InMemoryMessageRepository>();
         
         // SignalR 配置：添加 MessagePack 协议和优化选项
         builder.Services.AddSignalR()

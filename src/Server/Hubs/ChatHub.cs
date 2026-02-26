@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.SignalR;
-using SignalRDemo.Server.Services;
+using SignalRDemo.Infrastructure.Services;
 using SignalRDemo.Shared.Models;
+using SignalRDemo.Domain.Repositories;
+using MediatR;
 
 namespace SignalRDemo.Server.Hubs;
 
@@ -15,20 +17,39 @@ public class ChatHub : Hub
     private readonly IUserService _userService;
     private readonly IRoomService _roomService;
     private readonly ILogger<ChatHub> _logger;
+    
+    // DDD MediatR (可选依赖)
+    private readonly IMediator? _mediator;
+    private readonly IUserRepository? _userRepository;
+    private readonly IRoomRepository? _roomRepository;
+    private readonly IMessageRepository? _messageRepository;
 
     public ChatHub(
         IChatRepository chatRepository,
         IUserConnectionManager connectionManager,
         IUserService userService,
         IRoomService roomService,
-        ILogger<ChatHub> logger)
+        ILogger<ChatHub> logger,
+        IMediator? mediator = null,
+        IUserRepository? userRepository = null,
+        IRoomRepository? roomRepository = null,
+        IMessageRepository? messageRepository = null)
     {
         _chatRepository = chatRepository;
         _connectionManager = connectionManager;
         _userService = userService;
         _roomService = roomService;
         _logger = logger;
+        _mediator = mediator;
+        _userRepository = userRepository;
+        _roomRepository = roomRepository;
+        _messageRepository = messageRepository;
     }
+
+    /// <summary>
+    /// 检查是否使用 DDD 架构
+    /// </summary>
+    private bool IsDddEnabled => _mediator != null;
 
     #region 用户认证
 
