@@ -1,3 +1,4 @@
+@using SignalRDemo.Application.DTOs
 @using SignalRDemo.Client.Services
 @using SignalRDemo.Client.Infrastructure
 @using SignalRDemo.Shared.Models
@@ -178,15 +179,6 @@
         }
     }
 
-    /// <summary>
-    /// 房间统计数据传输对象
-    /// </summary>
-    private class RoomStatsDto
-    {
-        public int RoomCount { get; set; }
-        public int UserCount { get; set; }
-    }
-
     private async Task EnterLobbyAsync()
     {
         // 检查登录状态
@@ -305,6 +297,7 @@
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+        color: var(--primary-dark);
     }
 
     .header-actions {

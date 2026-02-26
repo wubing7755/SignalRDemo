@@ -3,12 +3,27 @@ using Microsoft.AspNetCore.SignalR;
 using SignalRDemo.Infrastructure.Services;
 using SignalRDemo.Shared.Models;
 using SignalRDemo.Domain.Repositories;
+using SignalRDemo.Application.Commands.Rooms;
+using SignalRDemo.Application.Commands.Messages;
+using SignalRDemo.Application.DTOs;
+using SignalRDemo.Application.Results;
+using SignalRDemo.Domain.ValueObjects;
 using MediatR;
+
+// 为避免类型冲突，使用显式命名空间别名
+using RegisterRequest = SignalRDemo.Shared.Models.RegisterRequest;
+using LoginRequest = SignalRDemo.Shared.Models.LoginRequest;
+using LoginResponse = SignalRDemo.Shared.Models.LoginResponse;
+using CreateRoomRequest = SignalRDemo.Shared.Models.CreateRoomRequest;
+using JoinRoomRequest = SignalRDemo.Shared.Models.JoinRoomRequest;
+using JoinRoomResponse = SignalRDemo.Shared.Models.JoinRoomResponse;
+using SendMessageRequest = SignalRDemo.Shared.Models.SendMessageRequest;
 
 namespace SignalRDemo.Server.Hubs;
 
 /// <summary>
 /// 聊天 Hub - 处理实时消息、用户认证和房间管理
+/// 遵循 DDD + CQRS 架构模式
 /// </summary>
 public class ChatHub : Hub
 {
@@ -16,40 +31,30 @@ public class ChatHub : Hub
     private readonly IUserConnectionManager _connectionManager;
     private readonly IUserService _userService;
     private readonly IRoomService _roomService;
+    private readonly IMediator _mediator;
+    private readonly IRoomRepository _roomRepository;
+    private readonly IUserRepository _userRepository;
     private readonly ILogger<ChatHub> _logger;
-    
-    // DDD MediatR (可选依赖)
-    private readonly IMediator? _mediator;
-    private readonly IUserRepository? _userRepository;
-    private readonly IRoomRepository? _roomRepository;
-    private readonly IMessageRepository? _messageRepository;
 
     public ChatHub(
         IChatRepository chatRepository,
         IUserConnectionManager connectionManager,
         IUserService userService,
         IRoomService roomService,
-        ILogger<ChatHub> logger,
-        IMediator? mediator = null,
-        IUserRepository? userRepository = null,
-        IRoomRepository? roomRepository = null,
-        IMessageRepository? messageRepository = null)
+        IMediator mediator,
+        IRoomRepository roomRepository,
+        IUserRepository userRepository,
+        ILogger<ChatHub> logger)
     {
         _chatRepository = chatRepository;
         _connectionManager = connectionManager;
         _userService = userService;
         _roomService = roomService;
-        _logger = logger;
         _mediator = mediator;
-        _userRepository = userRepository;
         _roomRepository = roomRepository;
-        _messageRepository = messageRepository;
+        _userRepository = userRepository;
+        _logger = logger;
     }
-
-    /// <summary>
-    /// 检查是否使用 DDD 架构
-    /// </summary>
-    private bool IsDddEnabled => _mediator != null;
 
     #region 用户认证
 
@@ -239,65 +244,94 @@ public class ChatHub : Hub
     #region 房间管理
 
     /// <summary>
-    /// 创建房间
+    /// 创建房间 - 使用 DDD MediatR Command
     /// </summary>
-    public async Task<ChatRoom> CreateRoom(CreateRoomRequest request)
+    public async Task<JoinRoomResponse> CreateRoom(CreateRoomRequest request)
     {
         // 使用统一的方法获取当前用户信息
         var (userId, userName) = GetCurrentUser();
         
         if (string.IsNullOrEmpty(userId))
         {
-            await Clients.Caller.SendAsync("RoomCreated", new JoinRoomResponse
+            return new JoinRoomResponse
             {
                 Success = false,
                 Message = "请先登录"
-            });
-            return null!;
+            };
         }
 
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length < 2)
         {
-            await Clients.Caller.SendAsync("RoomCreated", new JoinRoomResponse
+            return new JoinRoomResponse
             {
                 Success = false,
                 Message = "房间名称至少2个字符"
-            });
-            return null!;
+            };
         }
 
         if (!request.IsPublic && string.IsNullOrWhiteSpace(request.Password))
         {
-            await Clients.Caller.SendAsync("RoomCreated", new JoinRoomResponse
+            return new JoinRoomResponse
             {
                 Success = false,
                 Message = "私人房间必须设置密码"
-            });
-            return null!;
+            };
         }
 
-        var room = await _roomService.CreateRoomAsync(
+        // 使用 MediatR 发送命令，遵循 DDD + CQRS 模式
+        var command = new CreateRoomCommand(
             request.Name,
             request.Description,
             userId,
             request.IsPublic,
-            request.IsPublic ? null : request.Password);
+            request.IsPublic ? null : request.Password
+        );
+
+        var result = await _mediator.Send(command);
+
+        if (!result.IsSuccess)
+        {
+            return new JoinRoomResponse
+            {
+                Success = false,
+                Message = result.Error
+            };
+        }
+
+        var roomDto = result.Value;
 
         // 创建者加入房间分组
-        await Groups.AddToGroupAsync(Context.ConnectionId, room.Id);
+        await Groups.AddToGroupAsync(Context.ConnectionId, roomDto.Id);
+
+        // 转换为 Shared.Models.ChatRoom 用于 SignalR 广播
+        var chatRoom = new ChatRoom
+        {
+            Id = roomDto.Id,
+            Name = roomDto.Name,
+            Description = roomDto.Description,
+            OwnerId = roomDto.OwnerId,
+            IsPublic = roomDto.IsPublic,
+            MemberCount = roomDto.MemberCount,
+            CreatedAt = roomDto.CreatedAt
+        };
 
         // 广播新房间创建
         await Clients.All.SendAsync("RoomCreated", new JoinRoomResponse
         {
             Success = true,
-            Message = $"房间 '{room.Name}' 创建成功",
-            Room = room
+            Message = $"房间 '{roomDto.Name}' 创建成功",
+            Room = chatRoom
         });
 
         _logger.LogInformation("房间创建成功: {RoomName} (ID: {RoomId}) by User {UserId}", 
-            room.Name, room.Id, userId);
+            roomDto.Name, roomDto.Id, userId);
 
-        return room;
+        return new JoinRoomResponse
+        {
+            Success = true,
+            Message = $"房间 '{roomDto.Name}' 创建成功",
+            Room = chatRoom
+        };
     }
 
     /// <summary>
@@ -436,7 +470,7 @@ public class ChatHub : Hub
     }
 
     /// <summary>
-    /// 加入房间
+    /// 加入房间 - 使用 DDD MediatR Command
     /// </summary>
     public async Task<JoinRoomResponse> JoinRoom(JoinRoomRequest request)
     {
@@ -452,43 +486,40 @@ public class ChatHub : Hub
             };
         }
 
-        var room = await _roomService.GetRoomByIdAsync(request.RoomId);
-        if (room == null)
+        // 使用 MediatR 发送命令，遵循 DDD + CQRS 模式
+        var command = new JoinRoomCommand(
+            userId,
+            request.RoomId,
+            request.Password
+        );
+
+        var result = await _mediator.Send(command);
+
+        if (!result.IsSuccess)
         {
             return new JoinRoomResponse
             {
                 Success = false,
-                Message = "房间不存在"
+                Message = result.Error
             };
         }
 
-        // 验证密码（如果是私人房间）
-        if (!room.IsPublic)
-        {
-            var isValid = await _roomService.VerifyPasswordAsync(request.RoomId, request.Password ?? string.Empty);
-            if (!isValid)
-            {
-                return new JoinRoomResponse
-                {
-                    Success = false,
-                    Message = "房间密码错误"
-                };
-            }
-        }
-
-        // 添加用户到房间
-        var added = await _roomService.AddUserToRoomAsync(userId, request.RoomId);
-        if (!added)
-        {
-            return new JoinRoomResponse
-            {
-                Success = false,
-                Message = "加入房间失败"
-            };
-        }
+        var roomDto = result.Value;
 
         // 加入 SignalR 分组
-        await Groups.AddToGroupAsync(Context.ConnectionId, room.Id);
+        await Groups.AddToGroupAsync(Context.ConnectionId, roomDto.Id);
+
+        // 转换为 Shared.Models.ChatRoom 用于 SignalR 广播
+        var chatRoom = new ChatRoom
+        {
+            Id = roomDto.Id,
+            Name = roomDto.Name,
+            Description = roomDto.Description,
+            OwnerId = roomDto.OwnerId,
+            IsPublic = roomDto.IsPublic,
+            MemberCount = roomDto.MemberCount,
+            CreatedAt = roomDto.CreatedAt
+        };
 
         // 广播用户加入消息
         var joinMessage = new ChatMessage
@@ -496,23 +527,23 @@ public class ChatHub : Hub
             Id = Guid.NewGuid().ToString(),
             UserId = userId,
             UserName = userName ?? "未知用户",
-            RoomId = room.Id,
+            RoomId = roomDto.Id,
             Message = $"欢迎 {userName ?? "未知用户"} 加入房间",
             Timestamp = DateTime.UtcNow
         };
-        await Clients.Group(room.Id).SendAsync("ReceiveMessage", joinMessage);
+        await Clients.Group(roomDto.Id).SendAsync("ReceiveMessage", joinMessage);
 
         // 广播房间用户列表更新
-        await BroadcastRoomUserListAsync(room.Id);
+        await BroadcastRoomUserListAsync(roomDto.Id);
 
         _logger.LogInformation("用户 {UserName} (ID: {UserId}) 加入房间 {RoomName} (ID: {RoomId})", 
-            userName, userId, room.Name, room.Id);
+            userName, userId, roomDto.Name, roomDto.Id);
 
         return new JoinRoomResponse
         {
             Success = true,
-            Message = $"成功加入房间 '{room.Name}'",
-            Room = room
+            Message = $"成功加入房间 '{roomDto.Name}'",
+            Room = chatRoom
         };
     }
 
@@ -554,7 +585,7 @@ public class ChatHub : Hub
     }
 
     /// <summary>
-    /// 离开房间
+    /// 离开房间 - 使用 DDD MediatR Command
     /// </summary>
     public async Task LeaveRoom(string roomId)
     {
@@ -566,14 +597,15 @@ public class ChatHub : Hub
             return;
         }
 
-        var room = await _roomService.GetRoomByIdAsync(roomId);
-        if (room == null)
+        // 使用 MediatR 发送命令，遵循 DDD + CQRS 模式
+        var command = new LeaveRoomCommand(userId, roomId);
+        var result = await _mediator.Send(command);
+
+        if (!result.IsSuccess)
         {
+            _logger.LogWarning("离开房间失败: {Error}", result.Error);
             return;
         }
-
-        // 从房间移除用户
-        await _roomService.RemoveUserFromRoomAsync(userId, roomId);
 
         // 离开 SignalR 分组
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
@@ -590,8 +622,8 @@ public class ChatHub : Hub
         };
         await Clients.Group(roomId).SendAsync("ReceiveMessage", leaveMessage);
 
-        _logger.LogInformation("用户 {UserName} (ID: {UserId}) 离开房间 {RoomName} (ID: {RoomId})", 
-            userName, userId, room.Name, roomId);
+        _logger.LogInformation("用户 {UserName} (ID: {UserId}) 离开房间 (ID: {RoomId})", 
+            userName, userId, roomId);
     }
 
     /// <summary>
@@ -613,7 +645,7 @@ public class ChatHub : Hub
     #region 消息
 
     /// <summary>
-    /// 发送房间消息
+    /// 发送房间消息 - 使用 DDD MediatR Command
     /// </summary>
     public async Task SendRoomMessage(SendMessageRequest request)
     {
@@ -640,46 +672,55 @@ public class ChatHub : Hub
         }
 
         const int maxMessageLength = 500;
-        if (request.Message.Length > maxMessageLength)
+        var messageContent = request.Message;
+        if (messageContent.Length > maxMessageLength)
         {
-            request.Message = request.Message[..maxMessageLength];
+            messageContent = messageContent[..maxMessageLength];
         }
 
-        var room = await _roomService.GetRoomByIdAsync(request.RoomId);
-        if (room == null)
+        // 使用 MediatR 发送命令，遵循 DDD + CQRS 模式
+        // 注意: SendMessageCommand 使用 string 类型，SendMessageRequest 使用 MessageType 枚举
+        var messageTypeString = request.Type.ToString();
+        
+        var command = new SendMessageCommand(
+            userId,
+            userName ?? "未知用户",
+            request.RoomId,
+            messageContent,
+            messageTypeString,
+            request.MediaUrl,
+            request.AltText
+        );
+
+        var result = await _mediator.Send(command);
+
+        if (!result.IsSuccess)
         {
+            await Clients.Caller.SendAsync("Error", result.Error);
             return;
         }
 
-        // 检查用户是否在房间中
-        var isInRoom = await _roomService.IsUserInRoomAsync(userId, request.RoomId);
-        if (!isInRoom)
-        {
-            await Clients.Caller.SendAsync("Error", "您不在该房间中");
-            return;
-        }
+        var messageDto = result.Value;
 
-        var message = new ChatMessage
+        // 转换为 Shared.Models.ChatMessage 用于 SignalR 广播
+        var chatMessage = new ChatMessage
         {
-            Id = Guid.NewGuid().ToString(),
-            UserId = userId,
-            UserName = userName ?? "未知用户",
-            RoomId = request.RoomId,
-            Message = request.Message,
-            Type = request.Type,
-            MediaUrl = request.MediaUrl,
-            AltText = request.AltText,
-            Timestamp = DateTime.UtcNow
+            Id = messageDto.Id,
+            UserId = messageDto.UserId,
+            UserName = messageDto.UserName,
+            RoomId = messageDto.RoomId,
+            Message = messageDto.Content,
+            Type = Enum.Parse<MessageType>(messageDto.Type),
+            MediaUrl = messageDto.MediaUrl,
+            AltText = messageDto.AltText,
+            Timestamp = messageDto.Timestamp
         };
 
-        // 保存消息
-        await _chatRepository.SaveRoomMessageAsync(message);
-
         // 广播给房间内所有用户
-        await Clients.Group(request.RoomId).SendAsync("ReceiveMessage", message);
+        await Clients.Group(request.RoomId).SendAsync("ReceiveMessage", chatMessage);
 
-        _logger.LogDebug("房间消息已发送: {UserName} -> {RoomName}: {MessagePreview}", 
-            userName, room.Name, message.Message[..Math.Min(50, message.Message.Length)]);
+        _logger.LogDebug("房间消息已发送: {UserName} -> Room {RoomId}: {MessagePreview}", 
+            userName, request.RoomId, messageContent[..Math.Min(50, messageContent.Length)]);
     }
 
     /// <summary>

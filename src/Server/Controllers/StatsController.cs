@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SignalRDemo.Application.DTOs;
 using SignalRDemo.Infrastructure.Services;
 
 namespace SignalRDemo.Server.Controllers;
@@ -59,13 +60,4 @@ public class StatsController : ControllerBase
             return StatusCode(500, new { Error = "获取房间列表失败" });
         }
     }
-}
-
-/// <summary>
-/// 房间统计数据传输对象
-/// </summary>
-public class RoomStatsDto
-{
-    public int RoomCount { get; set; }
-    public int UserCount { get; set; }
 }
