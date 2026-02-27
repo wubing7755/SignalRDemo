@@ -1,6 +1,6 @@
 namespace SignalRDemo.Domain.ValueObjects;
 
-public class UserId : EntityId
+public class UserId : EntityId<UserId>
 {
     public UserId(string value) : base(value) { }
 

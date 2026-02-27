@@ -3,7 +3,7 @@ using SignalRDemo.Domain.ValueObjects;
 
 namespace SignalRDemo.Domain.Aggregates;
 
-public abstract class AggregateRoot<TId> where TId : EntityId
+public abstract class AggregateRoot<TId> where TId : EntityId<TId>
 {
     public TId Id { get; set; } = null!;
     public int Version { get; protected set; }

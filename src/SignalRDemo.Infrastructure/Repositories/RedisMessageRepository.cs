@@ -74,7 +74,7 @@ public class RedisMessageRepository : IMessageRepository
     public async Task<List<ChatMessage>> GetRecentMessagesAsync(int count = 50, CancellationToken cancellationToken = default)
     {
         // 获取所有房间的最新消息
-        var server = _redis.GetServer(_redis.GetEndPoints().First());
+        var server = _redis.GetServer(_redis.GetEndPoints()[0]);
         var keys = server.Keys(pattern: $"{RoomMessagesKeyPrefix}*").ToArray();
         
         var allMessages = new List<ChatMessage>();
@@ -198,7 +198,7 @@ public class RedisMessageRepository : IMessageRepository
         }
     }
 
-    private async Task AppendToFileAsync(string filePath, string json)
+    private static async Task AppendToFileAsync(string filePath, string json)
     {
         using var stream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
         using var writer = new StreamWriter(stream);
@@ -261,13 +261,14 @@ public class RedisMessageRepository : IMessageRepository
         return null;
     }
 
-    private async Task DeleteFromFileAsync(MessageId id)
+    private static async Task DeleteFromFileAsync(MessageId id)
     {
         // 文件系统删除比较复杂，这里只标记或跳过
+
         await Task.CompletedTask;
     }
 
-    private ChatMessage? DeserializeMessage(string json)
+    private static ChatMessage? DeserializeMessage(string json)
     {
         try
         {

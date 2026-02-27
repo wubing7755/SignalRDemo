@@ -15,7 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Shared\SignalRDemo.Shared.csproj" />
     <ProjectReference Include="..\SignalRDemo.Application\SignalRDemo.Application.csproj" />
     <ProjectReference Include="..\SignalRDemo.Shared\SignalRDemo.Shared.csproj" />
   </ItemGroup>

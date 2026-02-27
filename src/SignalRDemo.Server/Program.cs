@@ -3,13 +3,11 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using SignalRDemo.Server.Hubs;
 using SignalRDemo.Server.Services;
-using SignalRDemo.Infrastructure.Services;
 using SignalRDemo.Infrastructure.Repositories;
 using SignalRDemo.Domain.Repositories;
 using SignalRDemo.Application.Handlers;
 using MediatR;
 using StackExchange.Redis;
-using Microsoft.Extensions.Logging;
 
 public class Program
 {
