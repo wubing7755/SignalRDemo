@@ -8,6 +8,7 @@ using SignalRDemo.Infrastructure.Repositories;
 using SignalRDemo.Domain.Repositories;
 using SignalRDemo.Application.Handlers;
 using MediatR;
+using StackExchange.Redis;
 
 public class Program
 {
@@ -67,10 +68,19 @@ public class Program
         // MediatR
         builder.Services.AddMediatR(typeof(RegisterUserHandler).Assembly);
         
-        // 领域仓储 - 使用内存实现
-        builder.Services.AddSingleton<IUserRepository, InMemoryUserRepository>();
-        builder.Services.AddSingleton<IRoomRepository, InMemoryRoomRepository>();
-        builder.Services.AddSingleton<IMessageRepository, InMemoryMessageRepository>();
+        // Redis 连接
+        var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+        builder.Services.AddSingleton<IConnectionMultiplexer>(sp => 
+            ConnectionMultiplexer.Connect(redisConnection));
+        
+        // 消息存储路径
+        var messageStoragePath = builder.Configuration["MessageStorage:Path"] ?? "messages";
+        
+        // 领域仓储 - 使用 Redis 实现
+        builder.Services.AddSingleton<IUserRepository, RedisUserRepository>();
+        builder.Services.AddSingleton<IRoomRepository, RedisRoomRepository>();
+        builder.Services.AddSingleton<IMessageRepository>(sp => 
+            new RedisMessageRepository(sp.GetRequiredService<IConnectionMultiplexer>(), messageStoragePath));
         
         // SignalR 配置：添加 MessagePack 协议和优化选项
         builder.Services.AddSignalR()

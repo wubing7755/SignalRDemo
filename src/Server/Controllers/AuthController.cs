@@ -8,7 +8,6 @@ using Microsoft.IdentityModel.Tokens;
 using SignalRDemo.Shared.Models;
 using SharedLoginResponse = SignalRDemo.Shared.Models.LoginResponse;
 using SignalRDemo.Application.Commands.Users;
-using SignalRDemo.Application.DTOs;
 using SignalRDemo.Domain.Repositories;
 using MediatR;
 
@@ -178,7 +177,7 @@ public class AuthController : ControllerBase
             {
                 Id = user.Id.Value,
                 UserName = user.UserName.Value,
-                DisplayName = user.DisplayName?.Value
+                DisplayName = user.DisplayName.Value
             };
 
             var newToken = GenerateJwtToken(sharedUser);
@@ -236,7 +235,7 @@ public class AuthController : ControllerBase
             {
                 Id = user.Id.Value,
                 UserName = user.UserName.Value,
-                DisplayName = user.DisplayName?.Value
+                DisplayName = user.DisplayName.Value
             };
 
             return Ok(new { Success = true, User = sharedUser });
