@@ -4,7 +4,6 @@ using SignalRDemo.Application.DTOs;
 using SignalRDemo.Application.Results;
 using SignalRDemo.Domain.Repositories;
 using SignalRDemo.Domain.ValueObjects;
-using SignalRDemo.Shared.Models;
 using DomainChatMessage = SignalRDemo.Domain.Entities.ChatMessage;
 
 namespace SignalRDemo.Application.Handlers;

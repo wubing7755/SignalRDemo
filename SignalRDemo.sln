@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.2.11415.280
 MinimumVisualStudioVersion = 16.0.0.0
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalRDemo.Server", "src\Server\SignalRDemo.Server.csproj", "{6DCE74AF-CBB1-44F6-95ED-98443C57AA0B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalRDemo.Server", "src\SignalRDemo.Server\SignalRDemo.Server.csproj", "{6DCE74AF-CBB1-44F6-95ED-98443C57AA0B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalRDemo.Client", "src\Client\SignalRDemo.Client.csproj", "{912F825F-13A3-47CB-A9A3-227053E35AB1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalRDemo.Client", "src\SignalRDemo.Client\SignalRDemo.Client.csproj", "{912F825F-13A3-47CB-A9A3-227053E35AB1}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalRDemo.Shared", "src\Shared\SignalRDemo.Shared.csproj", "{19A8A28C-D205-4D9E-BE6F-433320022AF1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SignalRDemo.Shared", "src\SignalRDemo.Shared\SignalRDemo.Shared.csproj", "{19A8A28C-D205-4D9E-BE6F-433320022AF1}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8EBDDDB5-F388-4187-817E-BDAEFBE082ED}"
 EndProject

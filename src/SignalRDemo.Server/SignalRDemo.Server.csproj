@@ -20,6 +20,7 @@
     <ProjectReference Include="..\SignalRDemo.Domain\SignalRDemo.Domain.csproj" />
     <ProjectReference Include="..\SignalRDemo.Application\SignalRDemo.Application.csproj" />
     <ProjectReference Include="..\SignalRDemo.Infrastructure\SignalRDemo.Infrastructure.csproj" />
+    <ProjectReference Include="..\SignalRDemo.Shared\SignalRDemo.Shared.csproj" />
   </ItemGroup>
 
 

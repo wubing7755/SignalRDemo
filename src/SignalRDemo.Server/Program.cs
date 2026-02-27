@@ -9,6 +9,7 @@ using SignalRDemo.Domain.Repositories;
 using SignalRDemo.Application.Handlers;
 using MediatR;
 using StackExchange.Redis;
+using Microsoft.Extensions.Logging;
 
 public class Program
 {
@@ -76,9 +77,13 @@ public class Program
         // 消息存储路径
         var messageStoragePath = builder.Configuration["MessageStorage:Path"] ?? "messages";
         
-        // 领域仓储 - 使用 Redis 实现
-        builder.Services.AddSingleton<IUserRepository, RedisUserRepository>();
-        builder.Services.AddSingleton<IRoomRepository, RedisRoomRepository>();
+        // 领域仓储 - 使用 Redis 实现（带日志）
+        builder.Services.AddSingleton<IUserRepository>(sp => 
+            new RedisUserRepository(
+                sp.GetRequiredService<IConnectionMultiplexer>(),
+                sp.GetRequiredService<ILogger<RedisUserRepository>>()));
+        builder.Services.AddSingleton<IRoomRepository>(sp => 
+            new RedisRoomRepository(sp.GetRequiredService<IConnectionMultiplexer>()));
         builder.Services.AddSingleton<IMessageRepository>(sp => 
             new RedisMessageRepository(sp.GetRequiredService<IConnectionMultiplexer>(), messageStoragePath));
         

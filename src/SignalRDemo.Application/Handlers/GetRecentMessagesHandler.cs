@@ -2,7 +2,6 @@ using MediatR;
 using SignalRDemo.Application.DTOs;
 using SignalRDemo.Application.Queries.Messages;
 using SignalRDemo.Domain.Repositories;
-using SignalRDemo.Shared.Models;
 
 namespace SignalRDemo.Application.Handlers;
 
