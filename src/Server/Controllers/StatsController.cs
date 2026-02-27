@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SignalRDemo.Application.DTOs;
-using SignalRDemo.Infrastructure.Services;
+using SignalRDemo.Application.Queries.Rooms;
+using MediatR;
 
 namespace SignalRDemo.Server.Controllers;
 
@@ -11,24 +12,24 @@ namespace SignalRDemo.Server.Controllers;
 [Route("api/stats")]
 public class StatsController : ControllerBase
 {
-    private readonly IRoomService _roomService;
+    private readonly IMediator _mediator;
     private readonly ILogger<StatsController> _logger;
 
-    public StatsController(IRoomService roomService, ILogger<StatsController> logger)
+    public StatsController(IMediator mediator, ILogger<StatsController> logger)
     {
-        _roomService = roomService;
+        _mediator = mediator;
         _logger = logger;
     }
 
     /// <summary>
-    /// 获取房间统计数据
+    /// 获取房间统计数据 - 使用DDD Query
     /// </summary>
     [HttpGet("rooms")]
     public async Task<IActionResult> GetRoomStats()
     {
         try
         {
-            var rooms = await _roomService.GetPublicRoomsAsync();
+            var rooms = await _mediator.Send(new GetPublicRoomsQuery());
             var stats = new RoomStatsDto
             {
                 RoomCount = rooms.Count,
@@ -44,14 +45,14 @@ public class StatsController : ControllerBase
     }
 
     /// <summary>
-    /// 获取所有公共房间列表
+    /// 获取所有公共房间列表 - 使用DDD Query
     /// </summary>
     [HttpGet("rooms/list")]
     public async Task<IActionResult> GetPublicRooms()
     {
         try
         {
-            var rooms = await _roomService.GetPublicRoomsAsync();
+            var rooms = await _mediator.Send(new GetPublicRoomsQuery());
             return Ok(rooms);
         }
         catch (Exception ex)

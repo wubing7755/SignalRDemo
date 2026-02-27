@@ -100,4 +100,22 @@ public class InMemoryMessageRepository : IMessageRepository
             _lock.ExitWriteLock();
         }
     }
+
+    public Task<List<ChatMessage>> GetRecentMessagesAsync(int count = 50, CancellationToken cancellationToken = default)
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            var messages = _messages
+                .OrderByDescending(m => m.Timestamp)
+                .Take(count)
+                .OrderBy(m => m.Timestamp)
+                .ToList();
+            return Task.FromResult(messages);
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
 }

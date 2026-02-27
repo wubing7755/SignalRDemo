@@ -61,11 +61,6 @@ public class Program
 
         builder.Services.AddAuthorization();
 
-        // 注册聊天服务 - 使用 Infrastructure 层服务
-        builder.Services.AddSingleton<IChatRepository, ChatRepository>();
-        builder.Services.AddSingleton<IUserConnectionManager, UserConnectionManager>();
-        builder.Services.AddSingleton<IUserService, UserService>();
-        builder.Services.AddSingleton<IRoomService, RoomService>();
 
         // ========== DDD 新架构服务注册 ==========
         

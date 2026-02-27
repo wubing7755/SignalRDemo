@@ -5,8 +5,12 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
-using SignalRDemo.Infrastructure.Services;
 using SignalRDemo.Shared.Models;
+using SharedLoginResponse = SignalRDemo.Shared.Models.LoginResponse;
+using SignalRDemo.Application.Commands.Users;
+using SignalRDemo.Application.DTOs;
+using SignalRDemo.Domain.Repositories;
+using MediatR;
 
 namespace SignalRDemo.Server.Controllers;
 
@@ -17,48 +21,61 @@ namespace SignalRDemo.Server.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
-    private readonly IUserService _userService;
+    private readonly IMediator _mediator;
+    private readonly IUserRepository _userRepository;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
-        IUserService userService,
+        IMediator mediator,
+        IUserRepository userRepository,
         IConfiguration configuration,
         ILogger<AuthController> logger)
     {
-        _userService = userService;
+        _mediator = mediator;
+        _userRepository = userRepository;
         _configuration = configuration;
         _logger = logger;
     }
 
     /// <summary>
-    /// 用户登录
+    /// 用户登录 - 使用DDD Command
     /// </summary>
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] SignalRDemo.Shared.Models.LoginRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
             {
-                return BadRequest(new LoginResponse { Success = false, Message = "用户名和密码不能为空" });
+                return BadRequest(new SharedLoginResponse { Success = false, Message = "用户名和密码不能为空" });
             }
 
-            var user = await _userService.LoginAsync(request.UserName, request.Password);
+            var command = new LoginCommand(request.UserName, request.Password);
+            var result = await _mediator.Send(command);
             
-            if (user == null)
+            if (!result.IsSuccess)
             {
-                return Unauthorized(new LoginResponse { Success = false, Message = "用户名或密码错误" });
+                return Unauthorized(new SharedLoginResponse { Success = false, Message = result.Error });
             }
 
-            var token = GenerateJwtToken(user);
+            var user = result.Value;
+            // 转换为Shared.Models.User用于JWT生成
+            var sharedUser = new User
+            {
+                Id = user.Id,
+                UserName = user.UserName,
+                DisplayName = user.DisplayName
+            };
+
+            var token = GenerateJwtToken(sharedUser);
             var refreshToken = GenerateRefreshToken();
 
-            return Ok(new LoginResponse
+            return Ok(new SharedLoginResponse
             {
                 Success = true,
                 Message = "登录成功",
-                User = user,
+                User = sharedUser,
                 Token = token,
                 RefreshToken = refreshToken
             });
@@ -66,54 +83,58 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "登录失败");
-            return StatusCode(500, new LoginResponse { Success = false, Message = "登录失败" });
+            return StatusCode(500, new SharedLoginResponse { Success = false, Message = "登录失败" });
         }
     }
 
     /// <summary>
-    /// 用户注册
+    /// 用户注册 - 使用DDD Command
     /// </summary>
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] SignalRDemo.Shared.Models.RegisterRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
             {
-                return BadRequest(new LoginResponse { Success = false, Message = "用户名和密码不能为空" });
+                return BadRequest(new SharedLoginResponse { Success = false, Message = "用户名和密码不能为空" });
             }
 
             if (request.UserName.Length < 3 || request.UserName.Length > 20)
             {
-                return BadRequest(new LoginResponse { Success = false, Message = "用户名长度必须在3-20个字符之间" });
+                return BadRequest(new SharedLoginResponse { Success = false, Message = "用户名长度必须在3-20个字符之间" });
             }
 
             if (request.Password.Length < 6)
             {
-                return BadRequest(new LoginResponse { Success = false, Message = "密码长度至少6个字符" });
+                return BadRequest(new SharedLoginResponse { Success = false, Message = "密码长度至少6个字符" });
             }
 
-            var existingUser = await _userService.GetUserByUserNameAsync(request.UserName);
-            if (existingUser != null)
-            {
-                return BadRequest(new LoginResponse { Success = false, Message = "用户名已存在" });
-            }
-
-            var user = await _userService.RegisterAsync(request.UserName, request.Password, request.DisplayName);
+            var command = new RegisterUserCommand(request.UserName, request.Password, request.DisplayName);
+            var result = await _mediator.Send(command);
             
-            if (user == null)
+            if (!result.IsSuccess)
             {
-                return BadRequest(new LoginResponse { Success = false, Message = "注册失败" });
+                return BadRequest(new SharedLoginResponse { Success = false, Message = result.Error });
             }
 
-            var token = GenerateJwtToken(user);
+            var user = result.Value;
+            // 转换为Shared.Models.User用于JWT生成
+            var sharedUser = new User
+            {
+                Id = user.Id,
+                UserName = user.UserName,
+                DisplayName = user.DisplayName
+            };
+
+            var token = GenerateJwtToken(sharedUser);
             var refreshToken = GenerateRefreshToken();
 
-            return Ok(new LoginResponse
+            return Ok(new SharedLoginResponse
             {
                 Success = true,
                 Message = "注册成功",
-                User = user,
+                User = sharedUser,
                 Token = token,
                 RefreshToken = refreshToken
             });
@@ -121,12 +142,12 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "注册失败");
-            return StatusCode(500, new LoginResponse { Success = false, Message = "注册失败" });
+            return StatusCode(500, new SharedLoginResponse { Success = false, Message = "注册失败" });
         }
     }
 
     /// <summary>
-    /// 刷新 Token
+    /// 刷新 Token - 使用DDD Repository
     /// </summary>
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
@@ -135,7 +156,7 @@ public class AuthController : ControllerBase
         {
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
             {
-                return BadRequest(new LoginResponse { Success = false, Message = "Refresh token 不能为空" });
+                return BadRequest(new SharedLoginResponse { Success = false, Message = "Refresh token 不能为空" });
             }
 
             // 验证 Refresh Token 并获取用户信息
@@ -144,23 +165,30 @@ public class AuthController : ControllerBase
             
             if (string.IsNullOrEmpty(userId))
             {
-                return Unauthorized(new LoginResponse { Success = false, Message = "无效的 Refresh token" });
+                return Unauthorized(new SharedLoginResponse { Success = false, Message = "无效的 Refresh token" });
             }
 
-            var user = await _userService.GetUserByIdAsync(userId);
+            var user = await _userRepository.GetByIdAsync(SignalRDemo.Domain.ValueObjects.UserId.Create(userId), CancellationToken.None);
             if (user == null)
             {
-                return Unauthorized(new LoginResponse { Success = false, Message = "用户不存在" });
+                return Unauthorized(new SharedLoginResponse { Success = false, Message = "用户不存在" });
             }
 
-            var newToken = GenerateJwtToken(user);
+            var sharedUser = new User
+            {
+                Id = user.Id.Value,
+                UserName = user.UserName.Value,
+                DisplayName = user.DisplayName?.Value
+            };
+
+            var newToken = GenerateJwtToken(sharedUser);
             var newRefreshToken = GenerateRefreshToken();
 
-            return Ok(new LoginResponse
+            return Ok(new SharedLoginResponse
             {
                 Success = true,
                 Message = "Token 已刷新",
-                User = user,
+                User = sharedUser,
                 Token = newToken,
                 RefreshToken = newRefreshToken
             });
@@ -168,7 +196,7 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "刷新 token 失败");
-            return StatusCode(500, new LoginResponse { Success = false, Message = "刷新 token 失败" });
+            return StatusCode(500, new SharedLoginResponse { Success = false, Message = "刷新 token 失败" });
         }
     }
 
@@ -184,7 +212,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// 获取当前用户信息
+    /// 获取当前用户信息 - 使用DDD Repository
     /// </summary>
     [HttpGet("me")]
     [Authorize]
@@ -198,13 +226,20 @@ public class AuthController : ControllerBase
                 return Unauthorized();
             }
 
-            var user = await _userService.GetUserByIdAsync(userId);
+            var user = await _userRepository.GetByIdAsync(SignalRDemo.Domain.ValueObjects.UserId.Create(userId), CancellationToken.None);
             if (user == null)
             {
                 return NotFound();
             }
 
-            return Ok(new { Success = true, User = user });
+            var sharedUser = new User
+            {
+                Id = user.Id.Value,
+                UserName = user.UserName.Value,
+                DisplayName = user.DisplayName?.Value
+            };
+
+            return Ok(new { Success = true, User = sharedUser });
         }
         catch (Exception ex)
         {
